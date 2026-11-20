@@ -13,6 +13,7 @@ Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
 ```bash
 cp .env.example .env
 docker compose up -d db
+uv run alembic upgrade head
 uv run fastapi dev src/stockpilot/main.py
 ```
 
