@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from stockpilot.core.database import get_session
 from stockpilot.services.catalog import CatalogService
 from stockpilot.services.dealers import DealerService
+from stockpilot.services.units import UnitService
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -24,3 +25,10 @@ def get_catalog_service(session: SessionDep) -> CatalogService:
 
 
 CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
+
+
+def get_unit_service(session: SessionDep) -> UnitService:
+    return UnitService(session)
+
+
+UnitServiceDep = Annotated[UnitService, Depends(get_unit_service)]
