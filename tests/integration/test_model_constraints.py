@@ -1,6 +1,6 @@
 """The database itself enforces the core invariants, even if code bypasses the ORM."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -8,11 +8,12 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from stockpilot.domain.unit_status import UnitStatus
-from stockpilot.models import Dealer, Trim, Unit, VehicleModel
+from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, VehicleModel
 
 pytestmark = pytest.mark.integration
 
 VALID_VIN = "8AFZZZ12345678901"
+RESERVED_AT = datetime(2026, 7, 1, tzinfo=UTC)
 
 
 def _trim(session: Session, model_name: str = "Pickup X", trim_name: str = "XLT 4x4") -> Trim:
@@ -136,4 +137,60 @@ def test_unit_must_reference_an_existing_trim(db_session: Session) -> None:
     )
 
     with pytest.raises(IntegrityError, match="fk_units_trim_id_trims"):
+        db_session.flush()
+
+
+# --- Reservations and sales ---------------------------------------------------
+
+
+def _reservation(
+    session: Session, unit: Unit, dealer: Dealer, *, cancelled_at: datetime | None = None
+) -> Reservation:
+    reservation = Reservation(
+        unit=unit, dealer=dealer, reserved_at=RESERVED_AT, cancelled_at=cancelled_at
+    )
+    session.add(reservation)
+    session.flush()
+    return reservation
+
+
+def test_unit_can_have_only_one_active_reservation(db_session: Session, trim: Trim) -> None:
+    dealer = _dealer(db_session)
+    unit = _unit(db_session, trim, dealer=dealer)
+    _reservation(db_session, unit, dealer)
+
+    with pytest.raises(IntegrityError, match="uq_reservations_active_unit_id"):
+        _reservation(db_session, unit, dealer)
+
+
+def test_cancelled_reservations_do_not_block_a_new_one(db_session: Session, trim: Trim) -> None:
+    dealer = _dealer(db_session)
+    unit = _unit(db_session, trim, dealer=dealer)
+    cancelled = RESERVED_AT + timedelta(days=2)
+    _reservation(db_session, unit, dealer, cancelled_at=cancelled)
+    _reservation(db_session, unit, dealer, cancelled_at=cancelled)
+
+    active = _reservation(db_session, unit, dealer)
+
+    assert active.id is not None
+
+
+def test_reservation_cannot_be_cancelled_before_it_was_made(
+    db_session: Session, trim: Trim
+) -> None:
+    dealer = _dealer(db_session)
+    unit = _unit(db_session, trim, dealer=dealer)
+
+    with pytest.raises(IntegrityError, match="ck_reservations_cancelled_after_reserved"):
+        _reservation(db_session, unit, dealer, cancelled_at=RESERVED_AT - timedelta(days=1))
+
+
+def test_unit_can_be_sold_only_once(db_session: Session, trim: Trim) -> None:
+    dealer = _dealer(db_session)
+    unit = _unit(db_session, trim, dealer=dealer)
+    db_session.add(Sale(unit=unit, dealer=dealer, sold_at=RESERVED_AT))
+    db_session.flush()
+
+    db_session.add(Sale(unit=unit, dealer=dealer, sold_at=RESERVED_AT))
+    with pytest.raises(IntegrityError, match="uq_sales_unit_id"):
         db_session.flush()
