@@ -14,6 +14,7 @@ Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
 cp .env.example .env
 docker compose up -d db
 uv run alembic upgrade head
+uv run python scripts/seed.py   # fictitious dealer network
 uv run fastapi dev src/stockpilot/main.py
 ```
 
@@ -26,7 +27,7 @@ uv sync                                        # install dependencies
 uv run pytest                                  # all tests (integration ones need Docker)
 uv run pytest -m "not integration"             # unit tests only, no Docker
 uv run ruff check . && uv run ruff format --check .
-uv run mypy src tests
+uv run mypy src tests scripts
 ```
 
 CI (GitHub Actions) runs Ruff, mypy and pytest with coverage on every push to `main` and every pull request.

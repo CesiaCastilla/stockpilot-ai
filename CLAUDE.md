@@ -85,21 +85,22 @@ Reglas:
 uv sync                                   # instalar dependencias
 docker compose up -d db                   # levantar PostgreSQL 16
 uv run alembic upgrade head               # aplicar migraciones
+uv run python scripts/seed.py             # red ficticia: 30 concesionarios, 2.000 unidades, 180 días de ventas (--reset para regenerar)
 uv run alembic revision --autogenerate -m "describe change"  # nueva migración (revisarla siempre)
 uv run fastapi dev src/stockpilot/main.py # API en :8000 (/health, /docs)
 uv run pytest                             # tests (sin evals); los de integración necesitan Docker
 uv run pytest -m "not integration"        # solo unitarios, sin Docker
 uv run pytest --cov                       # con cobertura (mínimo 80%, como en CI)
 uv run ruff check . && uv run ruff format --check .
-uv run mypy src tests
+uv run mypy src tests scripts
 ```
 
 Actualizá esta sección cuando cambien los comandos.
 
 ## Estado del roadmap
 
-1. Base: estructura, uv, Docker, CI, modelos y Alembic, datos de prueba. **En curso:** hechos estructura, uv, Docker Compose (db), CI, `/health`, Alembic y modelos de catálogo, concesionarios y unidades. Faltan reservas y ventas, y `scripts/seed.py`.
-2. API y negocio: CRUD, estados de la unidad y VIN, cobertura y aging, tests.
+1. Base: estructura, uv, Docker, CI, modelos y Alembic, datos de prueba. **Hecha.**
+2. API y negocio: CRUD, estados de la unidad y VIN, cobertura y aging, tests. **Próxima.**
 3. Integraciones: vPIC, Georef, DolarApi, feriados (ArgentinaDatos), con mocks.
 4. Agente IA: grafo, herramientas, validador, aprobación humana, evals. Hito: MVP.
 5. Automatización y presentación: jobs, runbooks, README final, Postman + Newman, Cloud Run (extra).
