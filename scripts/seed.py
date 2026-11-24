@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from stockpilot.core.config import get_settings
 from stockpilot.core.database import build_engine, build_session_factory
 from stockpilot.domain.unit_status import UnitStatus
+from stockpilot.domain.vin import VIN_ALPHABET, check_digit
 from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, VehicleModel
 
 # Fictitious models: {model: [(trim, national popularity weight)]}
@@ -90,32 +91,17 @@ BUSINESS_TABLES = ("sales", "reservations", "units", "trims", "vehicle_models", 
 
 # --- VIN ---------------------------------------------------------------------
 
-VIN_ALPHABET = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789"  # I, O and Q are never used
-_VIN_VALUES = {
-    **{str(d): d for d in range(10)},
-    **dict(zip("ABCDEFGH", range(1, 9), strict=True)),
-    **dict(zip("JKLMN", range(1, 6), strict=True)),
-    "P": 7,
-    "R": 9,
-    **dict(zip("STUVWXYZ", range(2, 10), strict=True)),
-}
-_VIN_WEIGHTS = (8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2)
-
-
-def vin_check_digit(vin: str) -> str:
-    """Check digit (position 9) of a 17-character VIN, per the ISO 3779 / NHTSA scheme."""
-    total = sum(_VIN_VALUES[char] * weight for char, weight in zip(vin, _VIN_WEIGHTS, strict=True))
-    remainder = total % 11
-    return "X" if remainder == 10 else str(remainder)
+_VIN_CHARS = "".join(sorted(VIN_ALPHABET))
 
 
 def fake_vin(rng: random.Random, serial: int) -> str:
     """Made-up but well-formed VIN; the serial number keeps every VIN unique."""
     wmi = "8ZZ"  # fictitious manufacturer code
-    descriptor = "".join(rng.choice(VIN_ALPHABET) for _ in range(5))
+    descriptor = "".join(rng.choice(_VIN_CHARS) for _ in range(5))
     year, plant = "T", "A"  # 2026, plant A
     vin = f"{wmi}{descriptor}0{year}{plant}{serial:06d}"
-    return vin[:8] + vin_check_digit(vin) + vin[9:]
+    # Not required outside North America, but a valid one keeps the data realistic.
+    return vin[:8] + check_digit(vin) + vin[9:]
 
 
 # --- Data generation (pure: no database) --------------------------------------

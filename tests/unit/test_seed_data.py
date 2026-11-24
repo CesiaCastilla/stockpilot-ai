@@ -5,14 +5,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from scripts.seed import (
-    VIN_ALPHABET,
-    DemoData,
-    SeedConfig,
-    build_demo_data,
-    vin_check_digit,
-)
+from scripts.seed import DemoData, SeedConfig, build_demo_data
 from stockpilot.domain.unit_status import UnitStatus
+from stockpilot.domain.vin import check_digit, parse_vin
 
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 CONFIG = SeedConfig()
@@ -47,14 +42,8 @@ def test_vins_are_unique_and_well_formed(data: DemoData) -> None:
 
     assert len(set(vins)) == len(vins)
     for vin in vins:
-        assert len(vin) == 17
-        assert set(vin) <= set(VIN_ALPHABET)
-        assert vin[8] == vin_check_digit(vin)
-
-
-def test_vin_check_digit_matches_a_known_example() -> None:
-    # Standard worked example used to explain the algorithm.
-    assert vin_check_digit("1M8GDM9A0KP042788") == "X"
+        assert parse_vin(vin) == vin
+        assert vin[8] == check_digit(vin)
 
 
 def test_dealer_stock_never_exceeds_yard_capacity(data: DemoData) -> None:
