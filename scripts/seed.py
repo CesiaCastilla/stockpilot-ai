@@ -87,7 +87,15 @@ SOLD_OUT_SHARE = 0.12  # sells there but gets no stock -> shortage
 DISTRIBUTION_CENTER_SHARE = 0.10  # stock not yet assigned to any dealer
 RECENT_SALE_DAYS = 7  # sold but not yet delivered
 
-BUSINESS_TABLES = ("sales", "reservations", "units", "trims", "vehicle_models", "dealers")
+BUSINESS_TABLES = (
+    "unit_events",
+    "sales",
+    "reservations",
+    "units",
+    "trims",
+    "vehicle_models",
+    "dealers",
+)
 
 # --- VIN ---------------------------------------------------------------------
 
