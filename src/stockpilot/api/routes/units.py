@@ -53,3 +53,37 @@ def get_unit(unit_id: int, service: UnitServiceDep) -> UnitRead:
 def get_unit_history(unit_id: int, service: UnitServiceDep) -> list[UnitEventRead]:
     """Status changes of the unit, oldest first. Not paginated: a unit has a handful."""
     return [UnitEventRead.model_validate(e) for e in service.history(unit_id)]
+
+
+# --- Lifecycle ----------------------------------------------------------------
+# One endpoint per business operation instead of PATCH {"status": ...}: each has
+# its own rules and side effects (e.g. selling also creates the sale).
+
+
+@router.post("/{unit_id}/arrive", responses=_ERRORS)
+def arrive(unit_id: int, service: UnitServiceDep) -> UnitRead:
+    """The unit in transit reaches its destination yard."""
+    return UnitRead.model_validate(service.arrive(unit_id))
+
+
+@router.post("/{unit_id}/reserve", responses=_ERRORS)
+def reserve(unit_id: int, service: UnitServiceDep) -> UnitRead:
+    return UnitRead.model_validate(service.reserve(unit_id))
+
+
+@router.post("/{unit_id}/cancel-reservation", responses=_ERRORS)
+def cancel_reservation(unit_id: int, service: UnitServiceDep) -> UnitRead:
+    """The reservation is closed and the unit is available again."""
+    return UnitRead.model_validate(service.cancel_reservation(unit_id))
+
+
+@router.post("/{unit_id}/sell", responses=_ERRORS)
+def sell(unit_id: int, service: UnitServiceDep) -> UnitRead:
+    """Sell a unit in the yard, or turn its reservation into a sale."""
+    return UnitRead.model_validate(service.sell(unit_id))
+
+
+@router.post("/{unit_id}/deliver", responses=_ERRORS)
+def deliver(unit_id: int, service: UnitServiceDep) -> UnitRead:
+    """Hand the sold unit to its customer."""
+    return UnitRead.model_validate(service.deliver(unit_id))

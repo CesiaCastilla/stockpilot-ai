@@ -17,6 +17,16 @@ class UnitRepository:
     def get(self, unit_id: int) -> Unit | None:
         return self.session.get(Unit, unit_id)
 
+    def get_for_update(self, unit_id: int) -> Unit | None:
+        """Get the unit and lock its row until the transaction ends.
+
+        Two concurrent operations on the same unit run one after the other:
+        the second one sees the status left by the first.
+        """
+        return self.session.get(
+            Unit, unit_id, with_for_update={"key_share": True}, populate_existing=True
+        )
+
     def get_by_vin(self, vin: str) -> Unit | None:
         return self.session.scalar(select(Unit).where(Unit.vin == vin))
 
