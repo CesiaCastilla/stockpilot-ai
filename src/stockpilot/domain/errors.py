@@ -5,6 +5,25 @@ class DomainError(Exception):
     """Base class for business rule violations."""
 
 
+class NotFoundError(DomainError):
+    def __init__(self, entity: str, key: object) -> None:
+        self.entity = entity
+        self.key = key
+        super().__init__(f"{entity} {key} not found")
+
+
+class AlreadyExistsError(DomainError):
+    def __init__(self, entity: str, field: str, value: object) -> None:
+        self.entity = entity
+        self.field = field
+        self.value = value
+        super().__init__(f"{entity} with {field} {value!r} already exists")
+
+
+class ConflictError(DomainError):
+    """The request is valid but contradicts the current state of the data."""
+
+
 class InvalidVinError(DomainError):
     def __init__(self, vin: str, reason: str) -> None:
         self.vin = vin

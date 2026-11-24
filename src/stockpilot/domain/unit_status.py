@@ -13,6 +13,10 @@ class UnitStatus(StrEnum):
     DELIVERED = "delivered"
 
 
+# Units that occupy (or are about to occupy) a dealer's yard: in transit units
+# count against the destination's capacity.
+STOCK_STATUSES = frozenset({UnitStatus.IN_TRANSIT, UnitStatus.IN_YARD, UnitStatus.RESERVED})
+
 # Every status change not listed here is a business error.
 ALLOWED_TRANSITIONS: dict[UnitStatus, frozenset[UnitStatus]] = {
     # Arrives at its destination yard.
