@@ -74,3 +74,6 @@ class UnitEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    unit: Mapped[Unit] = relationship()
+    dealer: Mapped[Dealer | None] = relationship()

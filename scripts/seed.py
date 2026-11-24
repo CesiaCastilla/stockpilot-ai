@@ -8,6 +8,9 @@ The data is generated on purpose with the two problems StockPilot solves:
 - shortages: dealers that keep selling a trim they have no stock of;
 - aging: units sitting for months at dealers where that trim does not sell.
 
+Every unit comes with a history (unit_events) that the real service could
+have produced: same status machine, same registration rules.
+
     uv run python scripts/seed.py           # refuses to touch a non-empty database
     uv run python scripts/seed.py --reset   # wipes the business tables first
 """
@@ -27,7 +30,7 @@ from stockpilot.core.config import get_settings
 from stockpilot.core.database import build_engine, build_session_factory
 from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.domain.vin import VIN_ALPHABET, check_digit
-from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, VehicleModel
+from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, UnitEvent, VehicleModel
 
 # Fictitious models: {model: [(trim, national popularity weight)]}
 CATALOG: dict[str, list[tuple[str, float]]] = {
@@ -86,6 +89,7 @@ NO_DEMAND_SHARE = 0.10  # never sells there -> its stock ages
 SOLD_OUT_SHARE = 0.12  # sells there but gets no stock -> shortage
 DISTRIBUTION_CENTER_SHARE = 0.10  # stock not yet assigned to any dealer
 RECENT_SALE_DAYS = 7  # sold but not yet delivered
+TRANSIT_DAYS = (1.0, 4.0)  # trip from the distribution center to a dealer
 
 BUSINESS_TABLES = (
     "unit_events",
@@ -131,6 +135,7 @@ class DemoData:
     units: list[Unit] = field(default_factory=list)
     reservations: list[Reservation] = field(default_factory=list)
     sales: list[Sale] = field(default_factory=list)
+    events: list[UnitEvent] = field(default_factory=list)
 
     @property
     def stock_units(self) -> list[Unit]:
@@ -147,6 +152,8 @@ class _Builder:
         self.config = config
         self.now = now
         self.rng = random.Random(config.random_seed)
+        # Separate generator: adding history did not change the network itself.
+        self.history_rng = random.Random(f"history-{config.random_seed}")
         self.data = DemoData()
         self._next_serial = 1
 
@@ -217,7 +224,8 @@ class _Builder:
         )
         for t in center_trims:
             days = self.rng.uniform(0, 30)
-            self._new_unit(t, None, UnitStatus.IN_YARD, self.now - timedelta(days=days))
+            unit = self._new_unit(t, None, UnitStatus.IN_YARD, self.now - timedelta(days=days))
+            self._log(unit, (UnitStatus.IN_YARD, unit.received_at))
 
         # Capacity >= current stock; ratios close to 1.0 leave some yards almost full.
         stock_per_dealer: Counter[int] = Counter()
@@ -241,16 +249,26 @@ class _Builder:
             status = UnitStatus.IN_YARD
         unit = self._new_unit(t, self.data.dealers[d], status, received_at)
 
+        if status is UnitStatus.IN_TRANSIT:
+            self._log_shipment(unit)
+            return
+
+        # A customer reserves a unit that is already in the yard.
+        arrived_at = self._arrival(received_at, before=self.now)
+        steps = [(UnitStatus.IN_TRANSIT, received_at), (UnitStatus.IN_YARD, arrived_at)]
         if status is UnitStatus.RESERVED:
-            reserved_at = max(received_at, self.now - timedelta(days=self.rng.uniform(0, 10)))
+            earliest = max(arrived_at, self.now - timedelta(days=10))
+            reserved_at = earliest + (self.now - earliest) * self.rng.random()
+            steps.append((UnitStatus.RESERVED, reserved_at))
             self.data.reservations.append(
                 Reservation(unit=unit, dealer=unit.dealer, reserved_at=reserved_at)
             )
-        elif status is UnitStatus.IN_YARD and self.rng.random() < 0.05:
+        elif self.rng.random() < 0.05:
             # History: a reservation that fell through.
-            span = self.now - received_at
-            reserved_at = received_at + span * self.rng.uniform(0, 0.5)
+            span = self.now - arrived_at
+            reserved_at = arrived_at + span * self.rng.uniform(0, 0.5)
             cancelled_at = min(self.now, reserved_at + timedelta(days=self.rng.uniform(1, 5)))
+            steps += [(UnitStatus.RESERVED, reserved_at), (UnitStatus.IN_YARD, cancelled_at)]
             self.data.reservations.append(
                 Reservation(
                     unit=unit,
@@ -259,6 +277,7 @@ class _Builder:
                     cancelled_at=cancelled_at,
                 )
             )
+        self._log(unit, *steps)
 
     def _build_sales(self, rates: dict[Cell, float]) -> None:
         for day in range(1, self.config.sales_days + 1):
@@ -272,6 +291,16 @@ class _Builder:
                 dealer = self.data.dealers[d]
                 unit = self._new_unit(t, dealer, status, received_at)
                 self.data.sales.append(Sale(unit=unit, dealer=dealer, sold_at=sold_at))
+
+                steps = [
+                    (UnitStatus.IN_TRANSIT, received_at),
+                    (UnitStatus.IN_YARD, self._arrival(received_at, before=sold_at)),
+                    (UnitStatus.SOLD, sold_at),
+                ]
+                if status is UnitStatus.DELIVERED:
+                    days = self.history_rng.uniform(1, RECENT_SALE_DAYS)
+                    steps.append((UnitStatus.DELIVERED, sold_at + timedelta(days=days)))
+                self._log(unit, *steps)
 
     def _new_unit(
         self, t: int, dealer: Dealer | None, status: UnitStatus, received_at: datetime
@@ -287,6 +316,46 @@ class _Builder:
         self._next_serial += 1
         self.data.units.append(unit)
         return unit
+
+    # History: the events UnitService would have recorded.
+
+    def _arrival(self, shipped_at: datetime, *, before: datetime) -> datetime:
+        """When the trip ended, always before the next thing that happened to the unit."""
+        trip = timedelta(days=self.history_rng.uniform(*TRANSIT_DAYS))
+        return shipped_at + min(trip, (before - shipped_at) / 2)
+
+    def _log_shipment(self, unit: Unit) -> None:
+        """A unit on its way right now. A trip takes days, so an older unit
+        waited at the distribution center and was shipped recently."""
+        trip = timedelta(days=self.history_rng.uniform(0, TRANSIT_DAYS[1]))
+        shipped_at = self.now - trip
+        if unit.received_at >= shipped_at:
+            self._log(unit, (UnitStatus.IN_TRANSIT, unit.received_at))
+            return
+        self._log(
+            unit,
+            (UnitStatus.IN_YARD, unit.received_at),
+            (UnitStatus.IN_TRANSIT, shipped_at),
+            from_center=True,
+        )
+
+    def _log(
+        self, unit: Unit, *steps: tuple[UnitStatus, datetime], from_center: bool = False
+    ) -> None:
+        """Record the steps in order. from_center: the first one happened at the
+        distribution center, before the unit had a dealer."""
+        previous: UnitStatus | None = None
+        for status, occurred_at in steps:
+            self.data.events.append(
+                UnitEvent(
+                    unit=unit,
+                    from_status=previous,
+                    to_status=status,
+                    dealer=None if from_center and previous is None else unit.dealer,
+                    occurred_at=occurred_at,
+                )
+            )
+            previous = status
 
 
 def build_demo_data(config: SeedConfig, now: datetime) -> DemoData:
@@ -309,7 +378,16 @@ def seed(session: Session, data: DemoData, *, reset: bool = False) -> None:
         raise DatabaseNotEmptyError(
             "The database already has data. Run with --reset to wipe it and seed again."
         )
-    session.add_all([*data.dealers, *data.trims, *data.units, *data.reservations, *data.sales])
+    session.add_all(
+        [
+            *data.dealers,
+            *data.trims,
+            *data.units,
+            *data.reservations,
+            *data.sales,
+            *data.events,
+        ]
+    )
     session.flush()
 
 
@@ -332,8 +410,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"Seeded {len(data.dealers)} dealers, {len(data.trims)} trims, "
-        f"{len(data.stock_units)} units in stock, {len(data.sales)} sales "
-        f"and {len(data.reservations)} reservations."
+        f"{len(data.stock_units)} units in stock, {len(data.sales)} sales, "
+        f"{len(data.reservations)} reservations and {len(data.events)} unit events."
     )
     return 0
 
