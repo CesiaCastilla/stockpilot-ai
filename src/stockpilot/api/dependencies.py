@@ -6,6 +6,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from stockpilot.core.database import get_session
+from stockpilot.services.catalog import CatalogService
 from stockpilot.services.dealers import DealerService
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -16,3 +17,10 @@ def get_dealer_service(session: SessionDep) -> DealerService:
 
 
 DealerServiceDep = Annotated[DealerService, Depends(get_dealer_service)]
+
+
+def get_catalog_service(session: SessionDep) -> CatalogService:
+    return CatalogService(session)
+
+
+CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
