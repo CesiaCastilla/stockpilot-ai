@@ -40,6 +40,8 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Lets tests import the developer scripts (scripts/seed.py).
+pythonpath = ["."]
 addopts = ["-ra", "--strict-markers", "-m", "not eval"]
 markers = [
     "integration: needs Docker (Testcontainers) to run a real PostgreSQL",
