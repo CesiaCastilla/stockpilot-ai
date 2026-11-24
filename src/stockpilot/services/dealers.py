@@ -34,7 +34,11 @@ class DealerService:
         return dealer
 
     def update(self, dealer_id: int, data: DealerUpdate) -> Dealer:
-        dealer = self.get(dealer_id)
+        # Locked: no unit can be registered to this dealer between the stock
+        # count below and the commit.
+        dealer = self.dealers.get_for_update(dealer_id)
+        if dealer is None:
+            raise NotFoundError("Dealer", dealer_id)
         changes = data.model_dump(exclude_unset=True)
 
         new_capacity = changes.get("yard_capacity")

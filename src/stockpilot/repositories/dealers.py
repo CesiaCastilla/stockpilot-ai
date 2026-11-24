@@ -16,6 +16,18 @@ class DealerRepository:
     def get(self, dealer_id: int) -> Dealer | None:
         return self.session.get(Dealer, dealer_id)
 
+    def get_for_update(self, dealer_id: int) -> Dealer | None:
+        """Get the dealer and lock its row until the transaction ends.
+
+        Whoever checks the yard capacity takes this lock first, so the stock
+        cannot change between the check and the write. key_share=True is FOR NO
+        KEY UPDATE: other transactions can still insert rows that reference
+        this dealer (e.g. a sale) without waiting.
+        """
+        return self.session.get(
+            Dealer, dealer_id, with_for_update={"key_share": True}, populate_existing=True
+        )
+
     def search(self, *, province: str | None, limit: int, offset: int) -> Sequence[Dealer]:
         query = select(Dealer).order_by(Dealer.code).limit(limit).offset(offset)
         if province is not None:
