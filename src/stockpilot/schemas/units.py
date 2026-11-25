@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from stockpilot.domain.unit_status import UnitStatus
 
@@ -35,6 +35,9 @@ class UnitFilters(BaseModel):
     )
     trim_id: int | None = None
     vehicle_model_id: int | None = None
+    color: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = Field(
+        default=None, description="Exact color, ignoring upper and lower case."
+    )
 
 
 class UnitRead(BaseModel):

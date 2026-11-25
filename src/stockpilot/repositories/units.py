@@ -76,4 +76,6 @@ def _filtered[Q: Select[Any]](query: Q, filters: UnitFilters) -> Q:
     if filters.vehicle_model_id is not None:
         trims_of_model = select(Trim.id).where(Trim.vehicle_model_id == filters.vehicle_model_id)
         query = query.where(Unit.trim_id.in_(trims_of_model))
+    if filters.color is not None:
+        query = query.where(func.lower(Unit.color) == func.lower(filters.color))
     return query
