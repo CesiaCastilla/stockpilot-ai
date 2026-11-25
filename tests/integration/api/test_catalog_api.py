@@ -134,7 +134,12 @@ def test_create_trim_belongs_to_the_model_in_the_url(api_client: TestClient) -> 
     trim = _create_trim(api_client, model["id"])
 
     assert trim["id"] > 0
-    assert trim | {"id": 0} == {"id": 0, "vehicle_model_id": model["id"], "name": "Base"}
+    assert trim | {"id": 0} == {
+        "id": 0,
+        "vehicle_model_id": model["id"],
+        "name": "Base",
+        "list_price_usd": None,
+    }
 
 
 def test_create_trim_for_unknown_model_returns_404(api_client: TestClient) -> None:
@@ -191,6 +196,44 @@ def test_rename_trim(api_client: TestClient) -> None:
     assert response.json() == trim | {"name": "Limited"}
 
 
+def test_trim_price_is_created_changed_and_cleared(api_client: TestClient) -> None:
+    model = _create_model(api_client)
+    created = api_client.post(
+        f"{MODELS}/{model['id']}/trims", json={"name": "Base", "list_price_usd": 25000}
+    ).json()
+    url = f"{TRIMS}/{created['id']}"
+
+    # Text, not a JSON number: no client turns it into a float by accident.
+    assert created["list_price_usd"] == "25000.00"
+
+    changed = api_client.patch(url, json={"list_price_usd": "26500.50"}).json()
+    assert changed == created | {"list_price_usd": "26500.50"}
+
+    renamed = api_client.patch(url, json={"name": "Sport"}).json()
+    assert renamed == changed | {"name": "Sport"}  # the price is kept
+
+    cleared = api_client.patch(url, json={"list_price_usd": None}).json()
+    assert cleared == renamed | {"list_price_usd": None}
+    assert api_client.get(url).json() == cleared
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        pytest.param({"name": None}, id="null-name"),
+        pytest.param({"list_price_usd": 0}, id="free"),
+        pytest.param({"list_price_usd": "1.001"}, id="three-decimals"),
+    ],
+)
+def test_update_trim_rejects_invalid_changes(
+    api_client: TestClient, changes: dict[str, Any]
+) -> None:
+    trim = _create_trim(api_client, _create_model(api_client)["id"])
+
+    assert api_client.patch(f"{TRIMS}/{trim['id']}", json=changes).status_code == 422
+    assert api_client.get(f"{TRIMS}/{trim['id']}").json() == trim
+
+
 def test_rename_trim_to_a_name_taken_in_its_model_is_rejected(api_client: TestClient) -> None:
     model = _create_model(api_client)
     _create_trim(api_client, model["id"], "Base")
@@ -199,6 +242,7 @@ def test_rename_trim_to_a_name_taken_in_its_model_is_rejected(api_client: TestCl
     response = api_client.patch(f"{TRIMS}/{sport['id']}", json={"name": "Base"})
 
     assert response.status_code == 409
+    assert response.json() == {"detail": "Trim with name 'Base' already exists"}
     assert api_client.get(f"{TRIMS}/{sport['id']}").json()["name"] == "Sport"
 
 

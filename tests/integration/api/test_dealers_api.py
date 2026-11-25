@@ -146,9 +146,40 @@ def test_update_can_clear_coordinates_with_null(api_client: TestClient) -> None:
     assert body["longitude"] == -60.65
 
 
+@pytest.mark.parametrize("field", ["province", "city"])
+def test_moving_a_dealer_clears_its_old_coordinates(api_client: TestClient, field: str) -> None:
+    created = _create(api_client, latitude=-32.95, longitude=-60.65)
+
+    body = api_client.patch(f"{URL}/{created['id']}", json={field: "Elsewhere"}).json()
+
+    assert body == created | {field: "Elsewhere", "latitude": None, "longitude": None}
+
+
+def test_moving_a_dealer_can_bring_its_new_coordinates(api_client: TestClient) -> None:
+    created = _create(api_client, latitude=-32.95, longitude=-60.65)
+    changes = {"city": "Elsewhere", "latitude": -31.4, "longitude": -64.2}
+
+    assert api_client.patch(f"{URL}/{created['id']}", json=changes).json() == created | changes
+
+
+def test_sending_the_same_address_keeps_the_coordinates(api_client: TestClient) -> None:
+    created = _create(api_client, latitude=-32.95, longitude=-60.65)
+    same = {"province": created["province"], "city": created["city"]}
+
+    assert api_client.patch(f"{URL}/{created['id']}", json=same).json() == created
+
+
+def test_names_are_trimmed(api_client: TestClient) -> None:
+    # Georef matches exact names, so " Tandil " would never be located.
+    created = _create(api_client, province=" Buenos Aires ", city=" Tandil ")
+
+    assert (created["province"], created["city"]) == ("Buenos Aires", "Tandil")
+
+
 @pytest.mark.parametrize(
     "changes",
     [
+        pytest.param({"city": " "}, id="blank-city"),
         pytest.param({"name": None}, id="null-required-field"),
         pytest.param({"code": "D999"}, id="code-is-immutable"),
         pytest.param({"yard_capacity": -1}, id="negative-capacity"),

@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -58,9 +59,11 @@ class TrimRepository:
             self.session.add(trim)
         return trim
 
-    def rename(self, trim: Trim, name: str) -> Trim:
-        with translate_violations(self.session, self._duplicate_name(name)):
-            trim.name = name
+    def update(self, trim: Trim, changes: Mapping[str, Any]) -> Trim:
+        duplicate = self._duplicate_name(changes.get("name", trim.name))
+        with translate_violations(self.session, duplicate):
+            for field, value in changes.items():
+                setattr(trim, field, value)
         return trim
 
     def delete(self, trim: Trim) -> None:

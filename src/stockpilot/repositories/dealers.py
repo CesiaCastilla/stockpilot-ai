@@ -1,12 +1,20 @@
 from collections.abc import Sequence
+from typing import NamedTuple
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from stockpilot.domain.errors import AlreadyExistsError, ConflictError
 from stockpilot.domain.unit_status import STOCK_STATUSES
 from stockpilot.models import Dealer, Unit
 from stockpilot.repositories.errors import translate_violations
+
+
+class PendingDealer(NamedTuple):
+    id: int
+    code: str
+    province: str
+    city: str
 
 
 class DealerRepository:
@@ -39,6 +47,14 @@ class DealerRepository:
         if province is not None:
             query = query.where(Dealer.province == province)
         return self.session.scalar(query) or 0
+
+    def without_coordinates(self) -> list[PendingDealer]:
+        query = (
+            select(Dealer.id, Dealer.code, Dealer.province, Dealer.city)
+            .where(or_(Dealer.latitude.is_(None), Dealer.longitude.is_(None)))
+            .order_by(Dealer.code)
+        )
+        return [PendingDealer(*row) for row in self.session.execute(query)]
 
     def count_stock_units(self, dealer_id: int) -> int:
         query = select(func.count()).where(

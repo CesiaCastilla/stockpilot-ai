@@ -22,6 +22,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -32,13 +33,13 @@ from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.domain.vin import VIN_ALPHABET, check_digit
 from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, UnitEvent, VehicleModel
 
-# Fictitious models: {model: [(trim, national popularity weight)]}
-CATALOG: dict[str, list[tuple[str, float]]] = {
-    "Aconcagua": [("Base 4x2", 1.0), ("SR 4x4", 1.6), ("Limited 4x4", 0.7)],
-    "Talampaya": [("Comfort", 1.3), ("Highline", 0.8)],
-    "Tandil": [("Start", 1.8), ("Plus", 1.4), ("Sport", 0.5)],
-    "Ibera": [("Comfort", 0.9), ("Premium", 0.5)],
-    "Lanin": [("Cargo", 0.6), ("Passenger", 0.3)],
+# Fictitious models and prices: {model: [(trim, national popularity weight, list price in USD)]}
+CATALOG: dict[str, list[tuple[str, float, int]]] = {
+    "Aconcagua": [("Base 4x2", 1.0, 36_000), ("SR 4x4", 1.6, 45_000), ("Limited 4x4", 0.7, 52_000)],
+    "Talampaya": [("Comfort", 1.3, 27_000), ("Highline", 0.8, 31_500)],
+    "Tandil": [("Start", 1.8, 17_500), ("Plus", 1.4, 19_800), ("Sport", 0.5, 22_400)],
+    "Ibera": [("Comfort", 0.9, 33_000), ("Premium", 0.5, 38_500)],
+    "Lanin": [("Cargo", 0.6, 28_500), ("Passenger", 0.3, 32_000)],
 }
 
 COLORS: dict[str, float] = {
@@ -169,8 +170,11 @@ class _Builder:
     def _build_catalog(self) -> None:
         for model_name, trims in CATALOG.items():
             model = VehicleModel(name=model_name)
-            self.data.trims += [Trim(vehicle_model=model, name=name) for name, _ in trims]
-        self._popularity = [weight for trims in CATALOG.values() for _, weight in trims]
+            self.data.trims += [
+                Trim(vehicle_model=model, name=name, list_price_usd=Decimal(price))
+                for name, _, price in trims
+            ]
+        self._popularity = [weight for trims in CATALOG.values() for _, weight, _ in trims]
 
     def _build_dealers(self) -> None:
         for number, (province, city) in enumerate(DEALER_LOCATIONS[: self.config.dealers], start=1):

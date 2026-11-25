@@ -7,6 +7,8 @@ from stockpilot.models import Dealer
 from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.schemas.dealers import DealerCreate, DealerUpdate
 
+_ADDRESS = ("province", "city")
+
 
 class DealerService:
     """Business rules for dealers. Each public method is one transaction."""
@@ -49,6 +51,11 @@ class DealerService:
                     f"Yard capacity {new_capacity} is below the {stock} units "
                     f"already assigned to dealer {dealer.code}"
                 )
+
+        # Its coordinates are from the old address: cleared, unless the new ones
+        # came too, so the next sync locates it again.
+        if any(changes.get(f, getattr(dealer, f)) != getattr(dealer, f) for f in _ADDRESS):
+            changes = {"latitude": None, "longitude": None} | changes
 
         for field, value in changes.items():
             setattr(dealer, field, value)

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from stockpilot.domain.errors import NotFoundError
 from stockpilot.models import Trim, VehicleModel
 from stockpilot.repositories.catalog import TrimRepository, VehicleModelRepository
-from stockpilot.schemas.catalog import TrimCreate, VehicleModelCreate
+from stockpilot.schemas.catalog import TrimCreate, TrimUpdate, VehicleModelCreate
 
 
 class CatalogService:
@@ -58,12 +58,13 @@ class CatalogService:
 
     def create_trim(self, model_id: int, data: TrimCreate) -> Trim:
         model = self.get_model(model_id)
-        trim = self.trims.add(Trim(vehicle_model=model, name=data.name))
+        trim = self.trims.add(Trim(vehicle_model=model, **data.model_dump()))
         self.session.commit()
         return trim
 
-    def rename_trim(self, trim_id: int, name: str) -> Trim:
-        trim = self.trims.rename(self.get_trim(trim_id), name)
+    def update_trim(self, trim_id: int, data: TrimUpdate) -> Trim:
+        changes = data.model_dump(exclude_unset=True)
+        trim = self.trims.update(self.get_trim(trim_id), changes)
         self.session.commit()
         return trim
 

@@ -24,11 +24,26 @@ class ConflictError(DomainError):
     """The request is valid but contradicts the current state of the data."""
 
 
+class ExternalServiceError(DomainError):
+    """An external API failed or answered something we cannot use."""
+
+    def __init__(self, service: str, reason: str) -> None:
+        self.service = service
+        self.reason = reason
+        super().__init__(f"{service} is not available: {reason}")
+
+
 class InvalidVinError(DomainError):
     def __init__(self, vin: str, reason: str) -> None:
         self.vin = vin
         self.reason = reason
         super().__init__(f"Invalid VIN {vin!r}: {reason}")
+
+
+class InvalidTransitDaysError(DomainError):
+    def __init__(self, days: int, maximum: int) -> None:
+        self.days = days
+        super().__init__(f"Transit days must be between 0 and {maximum}, got {days}")
 
 
 class InvalidStatusTransitionError(DomainError):
