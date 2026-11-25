@@ -3,9 +3,12 @@ from collections.abc import Sequence
 from sqlalchemy.orm import Session
 
 from stockpilot.domain.errors import ConflictError, NotFoundError
+from stockpilot.domain.geo import Coordinates, distance_km
 from stockpilot.models import Dealer
 from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.schemas.dealers import DealerCreate, DealerUpdate
+
+_ADDRESS = ("province", "city")
 
 
 class DealerService:
@@ -50,11 +53,27 @@ class DealerService:
                     f"already assigned to dealer {dealer.code}"
                 )
 
+        # Its coordinates are from the old address: cleared, unless the new ones
+        # came too, so the next sync locates it again.
+        if any(changes.get(f, getattr(dealer, f)) != getattr(dealer, f) for f in _ADDRESS):
+            changes = {"latitude": None, "longitude": None} | changes
+
         for field, value in changes.items():
             setattr(dealer, field, value)
         self.session.commit()
         return dealer
 
+    def distance_km(self, dealer_a_id: int, dealer_b_id: int) -> float:
+        """Straight-line distance, rounded to 0.1 km."""
+        a, b = self.get(dealer_a_id), self.get(dealer_b_id)
+        return round(distance_km(_coordinates(a), _coordinates(b)), 1)
+
     def delete(self, dealer_id: int) -> None:
         self.dealers.delete(self.get(dealer_id))
         self.session.commit()
+
+
+def _coordinates(dealer: Dealer) -> Coordinates:
+    if dealer.latitude is None or dealer.longitude is None:
+        raise ConflictError(f"Dealer {dealer.code} has no coordinates yet")
+    return Coordinates(dealer.latitude, dealer.longitude)
