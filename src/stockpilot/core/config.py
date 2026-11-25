@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://stockpilot:stockpilot@localhost:5432/stockpilot"
     # Seconds to wait for PostgreSQL before giving up, so /health never hangs.
     database_connect_timeout: int = 3
+
+    # Coverage and aging thresholds, in days.
+    sales_window_days: PositiveInt = 60
+    low_coverage_days: PositiveInt = 15
+    aged_after_days: PositiveInt = 90
 
 
 @lru_cache

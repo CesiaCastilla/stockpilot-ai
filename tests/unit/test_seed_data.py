@@ -1,18 +1,15 @@
 """The demo network is valid, reproducible and contains the scenarios the agent must handle."""
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 import pytest
 
-from scripts.seed import (
-    VIN_ALPHABET,
-    DemoData,
-    SeedConfig,
-    build_demo_data,
-    vin_check_digit,
-)
-from stockpilot.domain.unit_status import UnitStatus
+from scripts.seed import TRANSIT_DAYS, DemoData, SeedConfig, build_demo_data
+from stockpilot.domain.unit_status import UnitStatus, ensure_transition
+from stockpilot.domain.vin import check_digit, parse_vin
+from stockpilot.models import UnitEvent
 
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 CONFIG = SeedConfig()
@@ -28,6 +25,7 @@ def test_same_seed_builds_the_same_network(data: DemoData) -> None:
 
     assert [u.vin for u in again.units] == [u.vin for u in data.units]
     assert [s.sold_at for s in again.sales] == [s.sold_at for s in data.sales]
+    assert [e.occurred_at for e in again.events] == [e.occurred_at for e in data.events]
 
 
 def test_different_seed_builds_a_different_network(data: DemoData) -> None:
@@ -47,14 +45,8 @@ def test_vins_are_unique_and_well_formed(data: DemoData) -> None:
 
     assert len(set(vins)) == len(vins)
     for vin in vins:
-        assert len(vin) == 17
-        assert set(vin) <= set(VIN_ALPHABET)
-        assert vin[8] == vin_check_digit(vin)
-
-
-def test_vin_check_digit_matches_a_known_example() -> None:
-    # Standard worked example used to explain the algorithm.
-    assert vin_check_digit("1M8GDM9A0KP042788") == "X"
+        assert parse_vin(vin) == vin
+        assert vin[8] == check_digit(vin)
 
 
 def test_dealer_stock_never_exceeds_yard_capacity(data: DemoData) -> None:
@@ -94,6 +86,86 @@ def test_reservation_dates_are_consistent(data: DemoData) -> None:
         assert reservation.unit.received_at <= reservation.reserved_at <= NOW
         if reservation.cancelled_at is not None:
             assert reservation.reserved_at <= reservation.cancelled_at <= NOW
+
+
+# --- History ------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def histories(data: DemoData) -> dict[str, list[UnitEvent]]:
+    by_vin: dict[str, list[UnitEvent]] = defaultdict(list)
+    for event in data.events:
+        by_vin[event.unit.vin].append(event)
+    return by_vin
+
+
+def test_every_history_follows_the_status_machine(
+    data: DemoData, histories: dict[str, list[UnitEvent]]
+) -> None:
+    for unit in data.units:
+        first, *rest = histories[unit.vin]
+
+        assert first.from_status is None
+        current = first.to_status
+        for event in rest:
+            assert event.from_status is current
+            ensure_transition(current, event.to_status)
+            current = event.to_status
+
+        # The history ends where the unit is now.
+        assert current is unit.status
+        assert [first, *rest][-1].dealer is unit.dealer
+
+
+def test_histories_start_as_a_registration(
+    data: DemoData, histories: dict[str, list[UnitEvent]]
+) -> None:
+    # Same rule as UnitService.register.
+    for unit in data.units:
+        first = histories[unit.vin][0]
+        expected = UnitStatus.IN_YARD if first.dealer is None else UnitStatus.IN_TRANSIT
+
+        assert first.occurred_at == unit.received_at
+        assert first.to_status is expected
+
+
+def test_history_dates_are_strictly_increasing_and_never_in_the_future(
+    histories: dict[str, list[UnitEvent]],
+) -> None:
+    for events in histories.values():
+        dates = [e.occurred_at for e in events]
+
+        assert all(a < b for a, b in pairwise(dates))
+        assert dates[-1] <= NOW
+
+
+def test_history_matches_reservations_and_sales(data: DemoData) -> None:
+    def dates(
+        *statuses: UnitStatus, previous: UnitStatus | None = None
+    ) -> list[tuple[str, datetime]]:
+        return sorted(
+            (e.unit.vin, e.occurred_at)
+            for e in data.events
+            if e.to_status in statuses and previous in (None, e.from_status)
+        )
+
+    reservations = data.reservations
+    assert dates(UnitStatus.SOLD) == sorted((s.unit.vin, s.sold_at) for s in data.sales)
+    assert dates(UnitStatus.RESERVED) == sorted((r.unit.vin, r.reserved_at) for r in reservations)
+    assert dates(UnitStatus.IN_YARD, previous=UnitStatus.RESERVED) == sorted(
+        (r.unit.vin, r.cancelled_at) for r in reservations if r.cancelled_at is not None
+    )
+
+
+def test_units_in_transit_left_within_the_length_of_a_trip(
+    data: DemoData, histories: dict[str, list[UnitEvent]]
+) -> None:
+    for unit in data.units:
+        if unit.status is UnitStatus.IN_TRANSIT:
+            assert NOW - histories[unit.vin][-1].occurred_at <= timedelta(days=TRANSIT_DAYS[1])
+
+
+# --- Scenarios ----------------------------------------------------------------
 
 
 def test_network_contains_shortages(data: DemoData) -> None:

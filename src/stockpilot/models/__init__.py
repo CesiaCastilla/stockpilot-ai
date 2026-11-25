@@ -4,6 +4,6 @@ from stockpilot.models.base import Base
 from stockpilot.models.catalog import Trim, VehicleModel
 from stockpilot.models.dealer import Dealer
 from stockpilot.models.sales import Reservation, Sale
-from stockpilot.models.unit import Unit
+from stockpilot.models.unit import Unit, UnitEvent
 
-__all__ = ["Base", "Dealer", "Reservation", "Sale", "Trim", "Unit", "VehicleModel"]
+__all__ = ["Base", "Dealer", "Reservation", "Sale", "Trim", "Unit", "UnitEvent", "VehicleModel"]

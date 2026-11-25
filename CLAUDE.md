@@ -100,8 +100,8 @@ Actualizá esta sección cuando cambien los comandos.
 ## Estado del roadmap
 
 1. Base: estructura, uv, Docker, CI, modelos y Alembic, datos de prueba. **Hecha.**
-2. API y negocio: CRUD, estados de la unidad y VIN, cobertura y aging, tests. **Próxima.**
-3. Integraciones: vPIC, Georef, DolarApi, feriados (ArgentinaDatos), con mocks.
+2. API y negocio: CRUD, estados de la unidad y VIN, cobertura y aging, tests. **Hecha.**
+3. Integraciones: vPIC, Georef, DolarApi, feriados (ArgentinaDatos), con mocks. **Próxima.**
 4. Agente IA: grafo, herramientas, validador, aprobación humana, evals. Hito: MVP.
 5. Automatización y presentación: jobs, runbooks, README final, Postman + Newman, Cloud Run (extra).
 

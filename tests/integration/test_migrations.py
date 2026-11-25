@@ -9,7 +9,7 @@ from stockpilot.models import Base
 
 pytestmark = pytest.mark.integration
 
-APP_TABLES = {"vehicle_models", "trims", "dealers", "units", "reservations", "sales"}
+APP_TABLES = {"vehicle_models", "trims", "dealers", "units", "reservations", "sales", "unit_events"}
 
 
 def test_models_match_the_latest_migration(migrated_engine: Engine) -> None:

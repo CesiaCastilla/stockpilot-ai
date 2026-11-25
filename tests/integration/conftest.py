@@ -6,9 +6,14 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
+
+from stockpilot.core.config import Settings
+from stockpilot.core.database import get_session
+from stockpilot.main import create_app
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,3 +59,15 @@ def db_session(migrated_engine: Engine) -> Iterator[Session]:
         finally:
             session.close()
             transaction.rollback()
+
+
+@pytest.fixture
+def api_client(postgres_url: str, db_session: Session) -> Iterator[TestClient]:
+    """HTTP client whose requests share db_session, so their writes are rolled back too.
+
+    Tests can also arrange data through db_session and the API will see it.
+    """
+    app = create_app(Settings(database_url=postgres_url))
+    app.dependency_overrides[get_session] = lambda: db_session
+    with TestClient(app) as client:
+        yield client
