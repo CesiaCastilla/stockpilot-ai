@@ -40,6 +40,10 @@ def test_network_has_the_configured_size(data: DemoData) -> None:
     assert len({d.code for d in data.dealers}) == CONFIG.dealers
 
 
+def test_every_trim_has_a_price(data: DemoData) -> None:
+    assert all(t.list_price_usd is not None and t.list_price_usd > 0 for t in data.trims)
+
+
 def test_vins_are_unique_and_well_formed(data: DemoData) -> None:
     vins = [u.vin for u in data.units]
 
