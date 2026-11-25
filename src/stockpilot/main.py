@@ -23,6 +23,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine.dispose()
 
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    app.state.settings = settings
     register_error_handlers(app)
     app.include_router(health.router)
     # Versioned prefix: a breaking change can live at /api/v2 without breaking clients.

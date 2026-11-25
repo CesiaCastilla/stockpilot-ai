@@ -2,8 +2,9 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Response, status
 
-from stockpilot.api.dependencies import DealerServiceDep
+from stockpilot.api.dependencies import CoverageServiceDep, DealerServiceDep, NowDep
 from stockpilot.schemas.common import ErrorResponse, Page
+from stockpilot.schemas.coverage import DealerCoverage
 from stockpilot.schemas.dealers import DealerCreate, DealerRead, DealerUpdate
 
 router = APIRouter(prefix="/dealers", tags=["dealers"])
@@ -52,3 +53,9 @@ def update_dealer(dealer_id: int, payload: DealerUpdate, service: DealerServiceD
 def delete_dealer(dealer_id: int, service: DealerServiceDep) -> Response:
     service.delete(dealer_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{dealer_id}/coverage", responses=_ERRORS)
+def get_dealer_coverage(dealer_id: int, service: CoverageServiceDep, now: NowDep) -> DealerCoverage:
+    """Coverage and aging by trim, most urgent first."""
+    return service.for_dealer(dealer_id, now=now)

@@ -1,0 +1,68 @@
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from stockpilot.domain.coverage import CoveragePolicy, days_in_stock
+from stockpilot.domain.errors import NotFoundError
+from stockpilot.repositories.coverage import CoverageRepository, TrimStockRow
+from stockpilot.repositories.dealers import DealerRepository
+from stockpilot.schemas.coverage import DealerCoverage, TrimCoverage
+
+
+class CoverageService:
+    """Coverage and aging. Read-only. `now` is a parameter, so results are reproducible."""
+
+    def __init__(self, session: Session, policy: CoveragePolicy) -> None:
+        self.policy = policy
+        self.dealers = DealerRepository(session)
+        self.coverage = CoverageRepository(session)
+
+    def for_dealer(self, dealer_id: int, *, now: datetime) -> DealerCoverage:
+        dealer = self.dealers.get(dealer_id)
+        if dealer is None:
+            raise NotFoundError("Dealer", dealer_id)
+
+        rows = self.coverage.by_trim(
+            dealer_id,
+            sales_since=self.policy.sales_since(now),
+            aged_before=self.policy.aged_before(now),
+            now=now,
+        )
+        trims = [self._trim_coverage(row, now) for row in rows]
+        # Most urgent first; trims without sales have no coverage and go last.
+        # sort() is stable: ties keep the repository order (model, trim).
+        trims.sort(key=lambda t: float("inf") if t.coverage_days is None else t.coverage_days)
+
+        return DealerCoverage(
+            dealer_id=dealer.id,
+            dealer_code=dealer.code,
+            yard_capacity=dealer.yard_capacity,
+            stock_units=sum(t.in_yard + t.in_transit + t.reserved for t in trims),
+            as_of=now,
+            sales_window_days=self.policy.sales_window_days,
+            low_coverage_days=self.policy.low_coverage_days,
+            aged_after_days=self.policy.aged_after_days,
+            trims=trims,
+        )
+
+    def _trim_coverage(self, row: TrimStockRow, now: datetime) -> TrimCoverage:
+        # In transit counts: otherwise a unit already on its way would not stop
+        # the agent from sending another one. Reserved does not: it has an owner.
+        coverage_days = self.policy.coverage_days(
+            available=row.in_yard + row.in_transit, recent_sales=row.recent_sales
+        )
+        oldest = row.oldest_received_at
+        return TrimCoverage(
+            vehicle_model_id=row.vehicle_model_id,
+            vehicle_model_name=row.vehicle_model_name,
+            trim_id=row.trim_id,
+            trim_name=row.trim_name,
+            in_yard=row.in_yard,
+            in_transit=row.in_transit,
+            reserved=row.reserved,
+            recent_sales=row.recent_sales,
+            coverage_days=coverage_days,
+            status=self.policy.status(coverage_days),
+            aged_units=row.aged_units,
+            oldest_unit_days=None if oldest is None else days_in_stock(oldest, now),
+        )
