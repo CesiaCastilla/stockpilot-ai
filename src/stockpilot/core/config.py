@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     http_max_attempts: PositiveInt = 3
     dolar_api_url: str = "https://dolarapi.com"
     exchange_rate_ttl_seconds: PositiveInt = 600
+    argentina_datos_url: str = "https://api.argentinadatos.com"
+    # A day, not forever: holidays are added or moved during the year.
+    holidays_ttl_seconds: PositiveInt = 86_400
 
 
 @lru_cache
