@@ -58,3 +58,31 @@ def test_failures_are_not_cached(clock: Clock) -> None:
         cache.get_or_load("k", fail)
 
     assert cache.get_or_load("k", Loader()) == 1
+
+
+def test_oldest_entry_leaves_when_it_is_full(clock: Clock) -> None:
+    cache: TtlCache[str, int] = TtlCache(60, max_entries=2, clock=clock)
+    load = Loader()
+    cache.get_or_load("a", load)
+    cache.get_or_load("b", load)
+    cache.get_or_load("c", load)
+
+    assert cache.get_or_load("b", load) == 2
+    assert cache.get_or_load("c", load) == 3
+    assert cache.get_or_load("a", load) == 4  # it had left
+
+
+def test_renewed_entry_is_not_the_oldest(clock: Clock) -> None:
+    cache: TtlCache[str, int] = TtlCache(60, max_entries=3, clock=clock)
+    load = Loader()
+    cache.get_or_load("a", load)
+    clock.now += 30
+    cache.get_or_load("b", load)
+    clock.now += 30
+    assert cache.get_or_load("a", load) == 3  # expired: loaded again
+
+    cache.get_or_load("c", load)
+    cache.get_or_load("d", load)
+
+    assert cache.get_or_load("a", load) == 3
+    assert cache.get_or_load("b", load) == 6  # the oldest one left
