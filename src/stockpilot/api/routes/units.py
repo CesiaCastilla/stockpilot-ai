@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query, status
 
 from stockpilot.api.dependencies import UnitServiceDep
 from stockpilot.schemas.common import ErrorResponse, Page
-from stockpilot.schemas.units import UnitCreate, UnitEventRead, UnitFilters, UnitRead
+from stockpilot.schemas.units import UnitCreate, UnitEventRead, UnitFilters, UnitRead, UnitUpdate
 
 router = APIRouter(prefix="/units", tags=["units"])
 
@@ -47,6 +47,12 @@ def get_unit_by_vin(vin: str, service: UnitServiceDep) -> UnitRead:
 @router.get("/{unit_id}", responses=_ERRORS)
 def get_unit(unit_id: int, service: UnitServiceDep) -> UnitRead:
     return UnitRead.model_validate(service.get(unit_id))
+
+
+@router.patch("/{unit_id}", responses=_ERRORS)
+def update_unit(unit_id: int, payload: UnitUpdate, service: UnitServiceDep) -> UnitRead:
+    """Correct the trim or the color of a unit in stock."""
+    return UnitRead.model_validate(service.update(unit_id, payload))
 
 
 @router.get("/{vin}/history", responses=_ERRORS)

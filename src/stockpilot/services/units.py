@@ -4,14 +4,14 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from stockpilot.domain.errors import ConflictError, InvalidStatusTransitionError, NotFoundError
-from stockpilot.domain.unit_status import UnitStatus, ensure_transition
+from stockpilot.domain.unit_status import STOCK_STATUSES, UnitStatus, ensure_transition
 from stockpilot.domain.vin import parse_vin
 from stockpilot.models import Dealer, Reservation, Sale, Unit, UnitEvent
 from stockpilot.repositories.catalog import TrimRepository
 from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.repositories.sales import SalesRepository
 from stockpilot.repositories.units import UnitRepository
-from stockpilot.schemas.units import UnitCreate, UnitFilters
+from stockpilot.schemas.units import UnitCreate, UnitFilters, UnitUpdate
 
 
 class UnitService:
@@ -76,6 +76,28 @@ class UnitService:
             )
         )
         self._record(unit, from_status=None, now=now)
+        self.session.commit()
+        return unit
+
+    def update(self, unit_id: int, data: UnitUpdate) -> Unit:
+        """Correct the trim or the color of a unit that is still in stock.
+
+        Once sold it is frozen: changing its trim would rewrite the past sales
+        that coverage is computed from.
+        """
+        # Locked: the unit cannot be sold between the check and the commit.
+        unit = self._locked(unit_id)
+        if unit.status not in STOCK_STATUSES:
+            raise ConflictError(
+                f"Unit {unit.vin} is {unit.status.value}: only units in stock can be corrected"
+            )
+        if data.trim_id is not None:
+            trim = self.trims.get(data.trim_id)
+            if trim is None:
+                raise NotFoundError("Trim", data.trim_id)
+            unit.trim = trim
+        if data.color is not None:
+            unit.color = data.color
         self.session.commit()
         return unit
 
