@@ -86,6 +86,7 @@ uv sync                                   # instalar dependencias
 docker compose up -d db                   # levantar PostgreSQL 16
 uv run alembic upgrade head               # aplicar migraciones
 uv run python scripts/seed.py             # red ficticia: 30 concesionarios, 2.000 unidades, 180 días de ventas (--reset para regenerar)
+uv run python -m stockpilot.workflows.sync_dealer_locations  # coordenadas y nombres oficiales de concesionarios (Georef)
 uv run alembic revision --autogenerate -m "describe change"  # nueva migración (revisarla siempre)
 uv run fastapi dev src/stockpilot/main.py # API en :8000 (/health, /docs)
 uv run pytest                             # tests (sin evals); los de integración necesitan Docker
