@@ -49,10 +49,10 @@ def get_unit(unit_id: int, service: UnitServiceDep) -> UnitRead:
     return UnitRead.model_validate(service.get(unit_id))
 
 
-@router.get("/{unit_id}/events", responses=_ERRORS)
-def get_unit_history(unit_id: int, service: UnitServiceDep) -> list[UnitEventRead]:
+@router.get("/{vin}/history", responses=_ERRORS)
+def get_unit_history(vin: str, service: UnitServiceDep) -> list[UnitEventRead]:
     """Status changes of the unit, oldest first. Not paginated: a unit has a handful."""
-    return [UnitEventRead.model_validate(e) for e in service.history(unit_id)]
+    return [UnitEventRead.model_validate(e) for e in service.history(vin)]
 
 
 # --- Lifecycle ----------------------------------------------------------------

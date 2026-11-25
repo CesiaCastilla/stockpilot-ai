@@ -46,9 +46,9 @@ class UnitService:
     ) -> tuple[Sequence[Unit], int]:
         return self.units.search(filters, limit=limit, offset=offset), self.units.count(filters)
 
-    def history(self, unit_id: int) -> Sequence[UnitEvent]:
-        self.get(unit_id)  # 404 for an unknown unit, not an empty history
-        return self.units.events_for(unit_id)
+    def history(self, raw_vin: str) -> Sequence[UnitEvent]:
+        unit = self.get_by_vin(raw_vin)  # 404 for an unknown unit, not an empty history
+        return self.units.events_for(unit.id)
 
     def register(self, data: UnitCreate) -> Unit:
         """A new unit enters the network's stock.
