@@ -59,12 +59,13 @@ def _insert(
     status: UnitStatus = UnitStatus.IN_YARD,
     dealer: Dealer | None = None,
     days_ago: int = 0,
+    color: str = "White",
 ) -> Unit:
     """Arrange units directly in the database, e.g. with an older received_at."""
     unit = Unit(
         vin=_vin(n),
         trim=trim,
-        color="White",
+        color=color,
         status=status,
         dealer=dealer,
         received_at=datetime.now(UTC) - timedelta(days=days_ago),
@@ -101,7 +102,7 @@ def test_registration_is_the_first_event_of_the_history(
 ) -> None:
     unit = _register(api_client, trim_id=network.pickup_base.id, dealer_id=network.cordoba.id)
 
-    events = api_client.get(f"{URL}/{unit['id']}/events").json()
+    events = api_client.get(f"{URL}/{unit['vin']}/history").json()
 
     assert len(events) == 1
     assert events[0] | {"id": 0} == {
@@ -216,12 +217,23 @@ def test_get_unit_by_id_and_by_vin(api_client: TestClient, network: Network) -> 
     assert api_client.get(f"{URL}/by-vin/{_vin(1).lower()}").json() == unit
 
 
+def test_history_is_found_by_vin_in_any_case_and_only_of_that_unit(
+    api_client: TestClient, network: Network
+) -> None:
+    _register(api_client, trim_id=network.pickup_base.id)
+    _register(api_client, vin=_vin(2), trim_id=network.pickup_base.id, dealer_id=network.cordoba.id)
+
+    events = api_client.get(f"{URL}/{_vin(2).lower()}/history").json()
+
+    assert [e["to_status"] for e in events] == ["in_transit"]
+
+
 def test_unknown_unit_returns_404(api_client: TestClient) -> None:
     assert api_client.get(f"{URL}/999999").status_code == 404
-    assert api_client.get(f"{URL}/999999/events").status_code == 404
-    by_vin = api_client.get(f"{URL}/by-vin/{_vin(9)}")
-    assert by_vin.status_code == 404
-    assert by_vin.json() == {"detail": f"Unit {_vin(9)} not found"}
+    for path in (f"by-vin/{_vin(9)}", f"{_vin(9)}/history"):
+        response = api_client.get(f"{URL}/{path}")
+        assert response.status_code == 404
+        assert response.json() == {"detail": f"Unit {_vin(9)} not found"}
 
 
 # --- List ---------------------------------------------------------------------
@@ -272,5 +284,32 @@ def test_list_filters_are_combined(api_client: TestClient, stock: Network) -> No
     assert body["total"] == 1
 
 
-def test_list_rejects_an_unknown_status(api_client: TestClient) -> None:
-    assert api_client.get(URL, params={"status": "lost"}).status_code == 422
+def test_list_filters_by_exact_color_in_any_case(
+    api_client: TestClient, db_session: Session, network: Network
+) -> None:
+    _insert(db_session, 1, network.pickup_base, color="Black")
+    _insert(db_session, 2, network.sedan_base, color="Black")
+    _insert(db_session, 3, network.pickup_base, color="Red")
+    _insert(db_session, 4, network.pickup_base, color="Pearl Black")
+
+    for color in ("Black", "black", " BLACK "):
+        assert sorted(_vins(api_client, color=color)) == ["1", "2"]
+    assert _vins(api_client, color="Green") == []
+    # "%" is plain text here, not a LIKE wildcard.
+    assert _vins(api_client, color="%black") == []
+
+    combined: dict[str, Any] = {"color": "black", "trim_id": network.pickup_base.id}
+    body = api_client.get(URL, params=combined).json()
+    assert [u["vin"][-1] for u in body["items"]] == ["1"]
+    assert body["total"] == 1
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        pytest.param({"status": "lost"}, id="unknown-status"),
+        pytest.param({"color": " "}, id="blank-color"),
+    ],
+)
+def test_list_rejects_invalid_filters(api_client: TestClient, params: dict[str, str]) -> None:
+    assert api_client.get(URL, params=params).status_code == 422

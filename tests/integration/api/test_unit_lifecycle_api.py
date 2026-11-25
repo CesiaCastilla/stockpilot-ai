@@ -57,8 +57,8 @@ def _do(client: TestClient, unit_id: int, action: str) -> dict[str, Any]:
     return body
 
 
-def _events(client: TestClient, unit_id: int) -> list[tuple[str | None, str]]:
-    body = client.get(f"{URL}/{unit_id}/events").json()
+def _events(client: TestClient, vin: str) -> list[tuple[str | None, str]]:
+    body = client.get(f"{URL}/{vin}/history").json()
     return [(e["from_status"], e["to_status"]) for e in body]
 
 
@@ -93,12 +93,12 @@ def test_actions_are_only_allowed_from_their_statuses(
     if expected is not None:
         assert response.status_code == 200, response.text
         assert response.json()["status"] == expected
-        assert _events(api_client, unit.id) == [(status.value, expected)]
+        assert _events(api_client, unit.vin) == [(status.value, expected)]
     else:
         # Rejected: neither the unit nor its history change.
         assert response.status_code == 409
         assert api_client.get(f"{URL}/{unit.id}").json()["status"] == status.value
-        assert _events(api_client, unit.id) == []
+        assert _events(api_client, unit.vin) == []
 
 
 @pytest.mark.parametrize("action", ACTIONS)
@@ -179,7 +179,7 @@ def test_unit_at_the_distribution_center_cannot_be_reserved_or_sold(
     assert "distribution center" in response.json()["detail"]
     # Checks run before changes: nothing is left half done in the session.
     assert api_client.get(f"{URL}/{unit.id}").json()["status"] == "in_yard"
-    assert _events(api_client, unit.id) == []
+    assert _events(api_client, unit.vin) == []
 
 
 def test_failed_sale_creates_no_sale(
@@ -211,7 +211,7 @@ def test_history_tells_the_whole_life_of_a_unit(
     for action in ("arrive", "reserve", "cancel-reservation", "reserve", "sell", "deliver"):
         _do(api_client, unit["id"], action)
 
-    assert _events(api_client, unit["id"]) == [
+    assert _events(api_client, unit["vin"]) == [
         (None, "in_transit"),
         ("in_transit", "in_yard"),
         ("in_yard", "reserved"),
