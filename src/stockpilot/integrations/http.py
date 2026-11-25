@@ -41,7 +41,7 @@ def build_http_client(settings: Settings) -> httpx.Client:
 
 
 class JsonApi:
-    """GET requests to one external JSON API.
+    """Read requests to one external JSON API.
 
     Every failure leaves as ExternalServiceError, so callers never depend on
     httpx, tenacity or the shape of the response.
@@ -68,8 +68,21 @@ class JsonApi:
         response_type: TypeAdapter[T],
         params: Mapping[str, str | int] | None = None,
     ) -> T:
+        return self._request(
+            path, response_type, lambda: self._http.get(self._base_url + path, params=params)
+        )
+
+    def post[T](self, path: str, response_type: TypeAdapter[T], body: object) -> T:
+        """Only for queries sent as POST: a retry could repeat a write."""
+        return self._request(
+            path, response_type, lambda: self._http.post(self._base_url + path, json=body)
+        )
+
+    def _request[T](
+        self, path: str, response_type: TypeAdapter[T], send: Callable[[], httpx.Response]
+    ) -> T:
         try:
-            response = self._get_with_retries(path, params)
+            response = self._send_with_retries(send)
             # Straight from the bytes: going through float would lose decimals.
             return response_type.validate_json(response.content)
         except httpx.HTTPError as error:
@@ -82,9 +95,7 @@ class JsonApi:
         logger.error("external_api_failed", service=self._service, path=path, error=str(cause))
         raise failure from cause
 
-    def _get_with_retries(
-        self, path: str, params: Mapping[str, str | int] | None
-    ) -> httpx.Response:
+    def _send_with_retries(self, send: Callable[[], httpx.Response]) -> httpx.Response:
         retrying = Retrying(
             retry=retry_if_exception(_is_transient),
             stop=stop_after_attempt(self._max_attempts),
@@ -95,11 +106,7 @@ class JsonApi:
             before_sleep=self._log_retry,
             reraise=True,
         )
-        return retrying(self._get_once, path, params)
-
-    def _get_once(self, path: str, params: Mapping[str, str | int] | None) -> httpx.Response:
-        response = self._http.get(f"{self._base_url}{path}", params=params)
-        return response.raise_for_status()
+        return retrying(lambda: send().raise_for_status())
 
     def _log_retry(self, state: RetryCallState) -> None:
         error = state.outcome.exception() if state.outcome else None
