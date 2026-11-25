@@ -6,6 +6,8 @@ other markets may use any character there, so validating it for every VIN would
 reject real Argentine units.
 """
 
+from datetime import date
+
 from stockpilot.domain.errors import InvalidVinError
 
 VIN_LENGTH = 17
@@ -41,3 +43,23 @@ def parse_vin(raw: str) -> str:
     if vin[0] in NORTH_AMERICA_PREFIXES and vin[8] != check_digit(vin):
         raise InvalidVinError(raw, f"check digit should be {check_digit(vin)!r}, got {vin[8]!r}")
     return vin
+
+
+# Position 10: A is 2010 and so on, without I, O, Q, U, Z or 0. It repeats every 30 years.
+_YEAR_CODES = "ABCDEFGHJKLMNPRSTVWXY123456789"
+_FIRST_CODED_YEAR = 2010
+# New vehicles: from a few years in stock to next year's model.
+_OLDEST_MODEL_YEARS = 3
+
+
+def model_year(vin: str, *, today: date) -> int | None:
+    """Model year of a new vehicle, from position 10 of a valid VIN.
+
+    Only North America requires the year there. Elsewhere it is common but
+    optional, so a year that no new vehicle can have is taken as "not a year".
+    """
+    position = _YEAR_CODES.find(vin[9])  # -1, if it is not a year code, matches no year
+    for year in range(today.year - _OLDEST_MODEL_YEARS, today.year + 2):
+        if (year - _FIRST_CODED_YEAR) % len(_YEAR_CODES) == position:
+            return year
+    return None

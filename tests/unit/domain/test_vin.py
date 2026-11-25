@@ -1,7 +1,9 @@
+from datetime import date
+
 import pytest
 
 from stockpilot.domain.errors import InvalidVinError
-from stockpilot.domain.vin import check_digit, parse_vin
+from stockpilot.domain.vin import check_digit, model_year, parse_vin
 
 # Standard worked example of the check digit algorithm: position 9 is "X".
 NORTH_AMERICAN_VIN = "1M8GDM9AXKP042788"
@@ -43,3 +45,31 @@ def test_invalid_vins_are_rejected_with_a_reason(raw: str, reason: str) -> None:
 
     assert error.value.reason == reason
     assert error.value.vin == raw
+
+
+def _vin_with_year_code(code: str) -> str:
+    return f"8ZZ84G7Y4{code}A000001"
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        pytest.param("P", 2023, id="oldest-accepted"),
+        pytest.param("R", 2024, id="2024"),
+        pytest.param("S", 2025, id="2025"),
+        pytest.param("T", 2026, id="this-year"),
+        pytest.param("V", 2027, id="next-year-model"),
+        pytest.param("W", None, id="too-far-ahead"),
+        pytest.param("N", None, id="too-old-to-be-new"),
+        pytest.param("4", None, id="2004-or-2034"),
+        pytest.param("U", None, id="never-a-year-code"),
+        pytest.param("0", None, id="zero-is-never-a-year-code"),
+    ],
+)
+def test_model_year_of_a_new_vehicle(code: str, expected: int | None) -> None:
+    assert model_year(_vin_with_year_code(code), today=date(2026, 11, 25)) == expected
+
+
+def test_year_codes_repeat_every_30_years() -> None:
+    assert model_year(_vin_with_year_code("9"), today=date(2039, 6, 1)) == 2039
+    assert model_year(_vin_with_year_code("A"), today=date(2039, 6, 1)) == 2040
