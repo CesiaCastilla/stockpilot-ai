@@ -1,6 +1,7 @@
 """The database itself enforces the core invariants, even if code bypasses the ORM."""
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import text
@@ -193,4 +194,12 @@ def test_unit_can_be_sold_only_once(db_session: Session, trim: Trim) -> None:
 
     db_session.add(Sale(unit=unit, dealer=dealer, sold_at=RESERVED_AT))
     with pytest.raises(IntegrityError, match="uq_sales_unit_id"):
+        db_session.flush()
+
+
+@pytest.mark.parametrize("price", [0, -1])
+def test_trim_price_must_be_positive(db_session: Session, trim: Trim, price: int) -> None:
+    trim.list_price_usd = Decimal(price)
+
+    with pytest.raises(IntegrityError, match="ck_trims_list_price_usd_positive"):
         db_session.flush()

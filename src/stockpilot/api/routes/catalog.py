@@ -99,7 +99,7 @@ def get_trim(trim_id: int, service: CatalogServiceDep) -> TrimRead:
 
 @router.patch("/trims/{trim_id}", responses=_ERRORS)
 def update_trim(trim_id: int, payload: TrimUpdate, service: CatalogServiceDep) -> TrimRead:
-    return TrimRead.model_validate(service.rename_trim(trim_id, payload.name))
+    return TrimRead.model_validate(service.update_trim(trim_id, payload))
 
 
 @router.delete("/trims/{trim_id}", status_code=status.HTTP_204_NO_CONTENT, responses=_ERRORS)
