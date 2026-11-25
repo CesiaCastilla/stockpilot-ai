@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from stockpilot.core.config import Settings
 from stockpilot.domain.errors import ExternalServiceError
 from stockpilot.domain.geo import Coordinates, Location, Place
-from stockpilot.integrations.http import JsonApi
+from stockpilot.integrations.http import JsonApi, build_json_api
 
 SERVICE = "Georef"
 
@@ -85,10 +85,5 @@ def _location(city: _City) -> Location:
 
 
 def build_georef(settings: Settings, http: httpx.Client) -> GeorefClient:
-    api = JsonApi(
-        http,
-        service=SERVICE,
-        base_url=settings.georef_url,
-        max_attempts=settings.http_max_attempts,
-    )
+    api = build_json_api(settings, http, service=SERVICE, base_url=settings.georef_url)
     return GeorefClient(api)

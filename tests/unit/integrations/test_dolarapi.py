@@ -49,9 +49,13 @@ def test_rate_is_cached(client: DolarApiClient, respx_mock: respx.MockRouter) ->
     assert route.call_count == 1
 
 
-def test_failure_is_reported_and_not_cached(
-    client: DolarApiClient, respx_mock: respx.MockRouter
-) -> None:
+def test_failure_is_reported_and_not_cached(respx_mock: respx.MockRouter) -> None:
+    settings = Settings(
+        dolar_api_url="https://dolar.example.test",
+        http_max_attempts=1,
+        http_failure_cooldown_seconds=0,
+    )
+    client = build_dolar_api(settings, httpx.Client())
     respx_mock.get(URL).side_effect = [httpx.Response(503), httpx.Response(200, text=RESPONSE)]
 
     with pytest.raises(ExternalServiceError, match="DolarApi is not available: HTTP 503"):

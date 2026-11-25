@@ -45,6 +45,9 @@ class JsonApi:
 
     Every failure leaves as ExternalServiceError, so callers never depend on
     httpx, tenacity or the shape of the response.
+
+    When the API looks down it is left alone for a while: an analysis of the
+    whole network would otherwise wait for every attempt of every call.
     """
 
     def __init__(
@@ -54,13 +57,18 @@ class JsonApi:
         service: str,
         base_url: str,
         max_attempts: int,
+        failure_cooldown: float = 0,
         sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._http = http
         self._service = service
         self._base_url = base_url.rstrip("/")
         self._max_attempts = max_attempts
+        self._failure_cooldown = failure_cooldown
         self._sleep = sleep
+        self._clock = clock
+        self._down_until: float | None = None
 
     def get[T](
         self,
@@ -81,11 +89,16 @@ class JsonApi:
     def _request[T](
         self, path: str, response_type: TypeAdapter[T], send: Callable[[], httpx.Response]
     ) -> T:
+        if self._down_until is not None and self._clock() < self._down_until:
+            raise ExternalServiceError(self._service, "failed recently, not asked again yet")
         try:
             response = self._send_with_retries(send)
             # Straight from the bytes: going through float would lose decimals.
             return response_type.validate_json(response.content)
         except httpx.HTTPError as error:
+            if _is_transient(error):
+                # Not after a 404, for example: the API works, that answer is the problem.
+                self._down_until = self._clock() + self._failure_cooldown
             failure = ExternalServiceError(self._service, _reason(error))
             cause: Exception = error
         except ValidationError as error:
@@ -116,6 +129,18 @@ class JsonApi:
             attempt=state.attempt_number,
             error=str(error),
         )
+
+
+def build_json_api(
+    settings: Settings, http: httpx.Client, *, service: str, base_url: str
+) -> JsonApi:
+    return JsonApi(
+        http,
+        service=service,
+        base_url=base_url,
+        max_attempts=settings.http_max_attempts,
+        failure_cooldown=settings.http_failure_cooldown_seconds,
+    )
 
 
 def _is_transient(error: BaseException) -> bool:

@@ -1,8 +1,9 @@
 """Application settings loaded from environment variables (and an optional .env file)."""
 
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import PositiveFloat, PositiveInt
+from pydantic import NonNegativeFloat, PositiveFloat, PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,9 @@ class Settings(BaseSettings):
 
     app_name: str = "StockPilot"
     environment: str = "local"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # "console" is easier to read during development.
+    log_format: Literal["json", "console"] = "json"
     # Local default matches docker-compose.yml; any real deployment overrides it.
     database_url: str = "postgresql+psycopg://stockpilot:stockpilot@localhost:5432/stockpilot"
     # Seconds to wait for PostgreSQL before giving up, so /health never hangs.
@@ -25,6 +29,8 @@ class Settings(BaseSettings):
     http_connect_timeout_seconds: PositiveFloat = 2
     http_timeout_seconds: PositiveFloat = 5
     http_max_attempts: PositiveInt = 3
+    # After an API fails every attempt, how long to fail fast instead of asking again.
+    http_failure_cooldown_seconds: NonNegativeFloat = 60
     dolar_api_url: str = "https://dolarapi.com"
     exchange_rate_ttl_seconds: PositiveInt = 600
     argentina_datos_url: str = "https://api.argentinadatos.com"

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from stockpilot.core.config import Settings
 from stockpilot.domain.delivery import Holiday
 from stockpilot.integrations.cache import TtlCache
-from stockpilot.integrations.http import JsonApi
+from stockpilot.integrations.http import JsonApi, build_json_api
 
 
 class _Holiday(BaseModel):
@@ -41,10 +41,7 @@ class ArgentinaDatosClient:
 
 
 def build_argentina_datos(settings: Settings, http: httpx.Client) -> ArgentinaDatosClient:
-    api = JsonApi(
-        http,
-        service="ArgentinaDatos",
-        base_url=settings.argentina_datos_url,
-        max_attempts=settings.http_max_attempts,
+    api = build_json_api(
+        settings, http, service="ArgentinaDatos", base_url=settings.argentina_datos_url
     )
     return ArgentinaDatosClient(api, TtlCache(settings.holidays_ttl_seconds))

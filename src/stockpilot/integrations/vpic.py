@@ -8,7 +8,7 @@ from pydantic import BaseModel, BeforeValidator, Field, TypeAdapter
 from stockpilot.core.config import Settings
 from stockpilot.domain.vin_info import VehicleInfo
 from stockpilot.integrations.cache import TtlCache
-from stockpilot.integrations.http import JsonApi
+from stockpilot.integrations.http import JsonApi, build_json_api
 
 # vPIC sends every field, with "" for the ones it does not know. They have no
 # default on purpose: a field that disappears is a contract change, not "unknown".
@@ -50,10 +50,5 @@ class VpicClient:
 
 
 def build_vpic(settings: Settings, http: httpx.Client) -> VpicClient:
-    api = JsonApi(
-        http,
-        service="vPIC",
-        base_url=settings.vpic_url,
-        max_attempts=settings.http_max_attempts,
-    )
+    api = build_json_api(settings, http, service="vPIC", base_url=settings.vpic_url)
     return VpicClient(api, TtlCache(settings.vin_ttl_seconds))

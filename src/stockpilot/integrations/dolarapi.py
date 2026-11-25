@@ -9,7 +9,7 @@ from pydantic import AwareDatetime, BaseModel, Field, TypeAdapter
 from stockpilot.core.config import Settings
 from stockpilot.domain.exchange_rate import ExchangeRate
 from stockpilot.integrations.cache import TtlCache
-from stockpilot.integrations.http import JsonApi
+from stockpilot.integrations.http import JsonApi, build_json_api
 
 Price = Annotated[Decimal, Field(gt=0)]
 
@@ -40,10 +40,5 @@ class DolarApiClient:
 
 
 def build_dolar_api(settings: Settings, http: httpx.Client) -> DolarApiClient:
-    api = JsonApi(
-        http,
-        service="DolarApi",
-        base_url=settings.dolar_api_url,
-        max_attempts=settings.http_max_attempts,
-    )
+    api = build_json_api(settings, http, service="DolarApi", base_url=settings.dolar_api_url)
     return DolarApiClient(api, TtlCache(settings.exchange_rate_ttl_seconds))
