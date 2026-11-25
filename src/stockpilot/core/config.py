@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import NonNegativeFloat, PositiveFloat, PositiveInt
+from pydantic import Field, NonNegativeFloat, PositiveFloat, PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     sales_window_days: PositiveInt = 60
     low_coverage_days: PositiveInt = 15
     aged_after_days: PositiveInt = 90
+
+    # Where units without a dealer are. The network is fictitious, and so is this point.
+    distribution_center_latitude: float = Field(default=-33.4, ge=-90, le=90)
+    distribution_center_longitude: float = Field(default=-61.5, ge=-180, le=180)
 
     # External APIs. Timeouts apply to each attempt.
     http_connect_timeout_seconds: PositiveFloat = 2

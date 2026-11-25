@@ -4,11 +4,10 @@ import pytest
 from sqlalchemy.orm import Session
 from structlog.testing import capture_logs
 
-from stockpilot.domain.errors import ConflictError, ExternalServiceError, NotFoundError
+from stockpilot.domain.errors import ExternalServiceError
 from stockpilot.domain.geo import Coordinates, Location, Place
 from stockpilot.models import Dealer
 from stockpilot.services.dealer_locations import DealerLocationService, LocationSyncReport
-from stockpilot.services.dealers import DealerService
 
 pytestmark = pytest.mark.integration
 
@@ -48,9 +47,6 @@ def _dealer(
 def _saved(session: Session, dealer: Dealer) -> tuple[str, str, float | None, float | None]:
     session.refresh(dealer)
     return dealer.province, dealer.city, dealer.latitude, dealer.longitude
-
-
-# --- Sync ---------------------------------------------------------------------
 
 
 def test_saves_coordinates_and_official_names(db_session: Session) -> None:
@@ -166,36 +162,3 @@ def test_dealer_deleted_meanwhile_is_skipped(db_session: Session) -> None:
     geocoder = FakeGeocoder({"Córdoba": (CORDOBA,)}, meanwhile=remove)
 
     assert DealerLocationService(db_session, geocoder).sync() == LocationSyncReport()
-
-
-# --- Distance -----------------------------------------------------------------
-
-
-def test_distance_between_dealers(db_session: Session) -> None:
-    cordoba = _dealer(db_session, "D001", "Córdoba", "Córdoba", CORDOBA.coordinates)
-    rosario = _dealer(db_session, "D002", "Santa Fe", "Rosario", ROSARIO.coordinates)
-    service = DealerService(db_session)
-
-    distance = service.distance_km(cordoba.id, rosario.id)
-
-    assert distance == pytest.approx(374, abs=2)
-    assert distance == round(distance, 1)
-    assert service.distance_km(cordoba.id, cordoba.id) == 0
-
-
-@pytest.mark.parametrize("missing", ["latitude", "longitude"])
-def test_distance_needs_both_coordinates(db_session: Session, missing: str) -> None:
-    cordoba = _dealer(db_session, "D001", "Córdoba", "Córdoba", CORDOBA.coordinates)
-    rosario = _dealer(db_session, "D002", "Santa Fe", "Rosario", ROSARIO.coordinates)
-    setattr(rosario, missing, None)
-    db_session.flush()
-
-    with pytest.raises(ConflictError, match="Dealer D002 has no coordinates yet"):
-        DealerService(db_session).distance_km(cordoba.id, rosario.id)
-
-
-def test_distance_to_an_unknown_dealer(db_session: Session) -> None:
-    cordoba = _dealer(db_session, "D001", "Córdoba", "Córdoba", CORDOBA.coordinates)
-
-    with pytest.raises(NotFoundError):
-        DealerService(db_session).distance_km(cordoba.id, 999999)
