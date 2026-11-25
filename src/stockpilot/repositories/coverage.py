@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -21,6 +22,13 @@ class TrimStockRow:
     recent_sales: int
     aged_units: int
     oldest_received_at: datetime | None
+
+
+@dataclass(frozen=True)
+class AgedValueRow:
+    units: int
+    priced_units: int
+    usd: Decimal
 
 
 class CoverageRepository:
@@ -79,3 +87,25 @@ class CoverageRepository:
             .order_by(VehicleModel.name, Trim.name)
         )
         return [TrimStockRow(*row) for row in self.session.execute(query)]
+
+    def aged_value(self, dealer_id: int, *, aged_before: datetime) -> AgedValueRow:
+        """The same aged units that by_trim counts, at list price."""
+        query = (
+            select(
+                func.count(),
+                func.count(Trim.list_price_usd),  # skips NULLs, like SUM does
+                func.sum(Trim.list_price_usd),
+            )
+            .select_from(Unit)
+            .join(Trim, Trim.id == Unit.trim_id)
+            .where(
+                Unit.dealer_id == dealer_id,
+                Unit.status == UnitStatus.IN_YARD,
+                Unit.received_at < aged_before,
+            )
+        )
+        units, priced_units, usd = self.session.execute(query).one()
+        # SUM of no rows is NULL.
+        return AgedValueRow(
+            units=units, priced_units=priced_units, usd=usd if usd is not None else Decimal(0)
+        )
