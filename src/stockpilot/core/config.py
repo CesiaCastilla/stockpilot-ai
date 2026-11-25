@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     argentina_datos_url: str = "https://api.argentinadatos.com"
     # A day, not forever: holidays are added or moved during the year.
     holidays_ttl_seconds: PositiveInt = 86_400
+    vpic_url: str = "https://vpic.nhtsa.dot.gov/api/vehicles"
+    vin_ttl_seconds: PositiveInt = 86_400
     # v1.0 on purpose: v2.0 has no single Buenos Aires city, only its 15 districts.
     georef_url: str = "https://apis.datos.gob.ar/georef/api/v1.0"
 
