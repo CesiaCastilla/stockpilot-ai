@@ -17,12 +17,14 @@ from stockpilot.domain.errors import (
     InvalidVinError,
     NotFoundError,
 )
+from stockpilot.domain.transfers import InvalidTransferError
 
 STATUS_BY_ERROR: dict[type[DomainError], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
     AlreadyExistsError: status.HTTP_409_CONFLICT,
     ConflictError: status.HTTP_409_CONFLICT,
     InvalidStatusTransitionError: status.HTTP_409_CONFLICT,
+    InvalidTransferError: status.HTTP_409_CONFLICT,
     InvalidVinError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     InvalidTransitDaysError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     # 502, not 500: the failure is in a service behind this API.
