@@ -160,6 +160,7 @@ def test_invalid_vin_is_rejected(api_client: TestClient, network: Network, vin: 
     "fields",
     [
         pytest.param({"color": ""}, id="empty-color"),
+        pytest.param({"color": " "}, id="blank-color"),
         pytest.param({"status": "sold"}, id="status-is-not-chosen-by-the-client"),
     ],
 )
@@ -236,6 +237,99 @@ def test_unknown_unit_returns_404(api_client: TestClient) -> None:
         assert response.json() == {"detail": f"Unit {_vin(9)} not found"}
 
 
+# --- Update -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("field", ["color", "trim_id"])
+def test_update_changes_only_the_fields_sent(
+    api_client: TestClient, network: Network, field: str
+) -> None:
+    unit = _register(api_client, trim_id=network.pickup_base.id, dealer_id=network.cordoba.id)
+    changes: dict[str, Any] = {field: {"color": "Red", "trim_id": network.pickup_limited.id}[field]}
+
+    response = api_client.patch(f"{URL}/{unit['id']}", json=changes)
+
+    assert response.status_code == 200
+    assert response.json() == unit | changes
+    assert api_client.get(f"{URL}/{unit['id']}").json() == unit | changes
+
+
+def test_update_is_not_a_status_change(api_client: TestClient, network: Network) -> None:
+    unit = _register(api_client, trim_id=network.pickup_base.id)
+
+    api_client.patch(f"{URL}/{unit['id']}", json={"color": "Red"})
+
+    assert len(api_client.get(f"{URL}/{unit['vin']}/history").json()) == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (UnitStatus.IN_TRANSIT, 200),
+        (UnitStatus.IN_YARD, 200),
+        (UnitStatus.RESERVED, 200),
+        (UnitStatus.SOLD, 409),
+        (UnitStatus.DELIVERED, 409),
+    ],
+)
+def test_update_is_only_for_units_in_stock(
+    api_client: TestClient,
+    db_session: Session,
+    network: Network,
+    status: UnitStatus,
+    expected: int,
+) -> None:
+    unit = _insert(db_session, 1, network.pickup_base, status, network.cordoba)
+
+    response = api_client.patch(f"{URL}/{unit.id}", json={"color": "Red"})
+
+    assert response.status_code == expected
+    if expected == 409:
+        assert response.json() == {
+            "detail": f"Unit {_vin(1)} is {status.value}: only units in stock can be corrected"
+        }
+    color = api_client.get(f"{URL}/{unit.id}").json()["color"]
+    assert color == ("Red" if expected == 200 else "White")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        pytest.param({"color": None}, id="null-color"),
+        pytest.param({"trim_id": None}, id="null-trim"),
+        pytest.param({"color": "  "}, id="blank-color"),
+        pytest.param({"color": "x" * 41}, id="color-too-long"),
+        pytest.param({"vin": _vin(2)}, id="vin-is-immutable"),
+        pytest.param({"status": "sold"}, id="status-has-its-own-operations"),
+        pytest.param({"dealer_id": 1}, id="dealer-has-its-own-operations"),
+        pytest.param({"color": "Red", "received_at": "2026-01-01"}, id="received-at"),
+    ],
+)
+def test_update_rejects_invalid_changes(
+    api_client: TestClient, network: Network, changes: dict[str, Any]
+) -> None:
+    unit = _register(api_client, trim_id=network.pickup_base.id)
+
+    assert api_client.patch(f"{URL}/{unit['id']}", json=changes).status_code == 422
+    assert api_client.get(f"{URL}/{unit['id']}").json() == unit
+
+
+def test_update_with_an_unknown_trim_changes_nothing(
+    api_client: TestClient, network: Network
+) -> None:
+    unit = _register(api_client, trim_id=network.pickup_base.id)
+
+    response = api_client.patch(f"{URL}/{unit['id']}", json={"trim_id": 999999, "color": "Red"})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Trim 999999 not found"}
+    assert api_client.get(f"{URL}/{unit['id']}").json() == unit
+
+
+def test_update_unknown_unit_returns_404(api_client: TestClient) -> None:
+    assert api_client.patch(f"{URL}/999999", json={"color": "Red"}).status_code == 404
+
+
 # --- List ---------------------------------------------------------------------
 
 
@@ -302,6 +396,17 @@ def test_list_filters_by_exact_color_in_any_case(
     body = api_client.get(URL, params=combined).json()
     assert [u["vin"][-1] for u in body["items"]] == ["1"]
     assert body["total"] == 1
+
+
+def test_color_is_stored_trimmed_so_the_filter_finds_it(
+    api_client: TestClient, network: Network
+) -> None:
+    unit = _register(api_client, trim_id=network.pickup_base.id, color=" Black ")
+    assert unit["color"] == "Black"
+    assert _vins(api_client, color="Black") == ["1"]
+
+    api_client.patch(f"{URL}/{unit['id']}", json={"color": " Red "})
+    assert _vins(api_client, color="Red") == ["1"]
 
 
 @pytest.mark.parametrize(

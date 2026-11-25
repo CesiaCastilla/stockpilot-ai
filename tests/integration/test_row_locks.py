@@ -19,7 +19,7 @@ from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.models import Dealer, Sale, Trim, Unit, UnitEvent, VehicleModel
 from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.repositories.units import UnitRepository
-from stockpilot.schemas.units import UnitCreate
+from stockpilot.schemas.units import UnitCreate, UnitUpdate
 from stockpilot.services.units import UnitService
 
 pytestmark = pytest.mark.integration
@@ -103,6 +103,16 @@ def test_concurrent_sales_of_one_unit_sell_it_once(
     assert sum(isinstance(r, InvalidStatusTransitionError) for r in results) == 1
     with Session(migrated_engine) as session:
         assert session.scalar(select(func.count()).select_from(Sale)) == 1
+
+
+def test_update_waits_for_a_sale_in_progress(migrated_engine: Engine, committed: Committed) -> None:
+    with Session(migrated_engine) as sale, Session(migrated_engine) as update:
+        UnitRepository(sale).get_for_update(committed.unit_id)
+        update.execute(text("SET LOCAL lock_timeout = '100ms'"))
+
+        # The same color, so there is no UPDATE to block: only the lock can wait.
+        with pytest.raises(OperationalError, match="lock timeout"):
+            UnitService(update).update(committed.unit_id, UnitUpdate(color="White"))
 
 
 def test_concurrent_registrations_do_not_exceed_the_yard_capacity(
