@@ -1,4 +1,10 @@
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field
+
+# The range of a PostgreSQL INTEGER key. Beyond it the database does not answer
+# "not found": it fails, and a model can write any number.
+DatabaseId = Annotated[int, Field(ge=1, le=2**31 - 1)]
 
 
 class Page[T](BaseModel):
