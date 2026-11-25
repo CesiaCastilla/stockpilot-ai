@@ -4,12 +4,14 @@ from typing import Annotated, Self
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from stockpilot.domain.unit_status import UnitStatus
+from stockpilot.schemas.common import DatabaseId, NoNul
 
 # Trimmed everywhere, so the filter always finds what was stored.
 # Same limit as the String(40) column.
 Color = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=40),
+    NoNul,
     Field(examples=["White"]),
 ]
 
@@ -22,9 +24,9 @@ class UnitCreate(BaseModel):
         description="17 characters, no I, O or Q. Normalized to upper case. "
         "VINs starting with 1-5 (North America) must have a valid check digit.",
     )
-    trim_id: int
+    trim_id: DatabaseId
     color: Color
-    dealer_id: int | None = Field(
+    dealer_id: DatabaseId | None = Field(
         default=None,
         description="Destination dealer: the unit is registered in transit to it. "
         "Omit it to register the unit in the distribution center yard.",
@@ -40,7 +42,7 @@ class UnitUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    trim_id: int | None = None
+    trim_id: DatabaseId | None = None
     color: Color | None = None
 
     @model_validator(mode="after")
@@ -58,12 +60,12 @@ class UnitFilters(BaseModel):
     status: list[UnitStatus] = Field(
         default_factory=list, description="Repeat to match any of several statuses."
     )
-    dealer_id: int | None = None
+    dealer_id: DatabaseId | None = None
     at_distribution_center: bool | None = Field(
         default=None, description="true: only units without a dealer; false: only with one."
     )
-    trim_id: int | None = None
-    vehicle_model_id: int | None = None
+    trim_id: DatabaseId | None = None
+    vehicle_model_id: DatabaseId | None = None
     color: Color | None = Field(
         default=None, description="Exact color, ignoring upper and lower case."
     )

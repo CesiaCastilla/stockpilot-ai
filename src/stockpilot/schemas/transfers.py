@@ -2,10 +2,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from stockpilot.schemas.common import DatabaseId
-
-# PostgreSQL text cannot hold a NUL character, and a model can write one.
-_NO_NUL = r"^[^\x00]*$"
+from stockpilot.schemas.common import DatabaseId, NoNul
 
 
 class TransferProposal(BaseModel):
@@ -18,11 +15,11 @@ class TransferProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    vin: Annotated[
-        str, StringConstraints(strip_whitespace=True, to_upper=True, pattern=_NO_NUL)
-    ] = Field(description="VIN of the unit to move.")
+    vin: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True), NoNul] = Field(
+        description="VIN of the unit to move."
+    )
     destination_dealer_id: DatabaseId = Field(description="Id of the dealer that receives it.")
     # Same limit as the String(500) column.
     reason: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500, pattern=_NO_NUL)
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500), NoNul
     ] = Field(description="Why this transfer, for the person who decides.")

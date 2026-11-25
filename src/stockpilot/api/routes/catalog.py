@@ -5,11 +5,12 @@ Shallow nesting: a trim is created and listed through its model
 has its own id it is addressed directly (/trims/{id}).
 """
 
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Response, status
 
 from stockpilot.api.dependencies import CatalogServiceDep
+from stockpilot.api.params import Limit, Offset
 from stockpilot.schemas.catalog import (
     TrimCreate,
     TrimRead,
@@ -18,7 +19,7 @@ from stockpilot.schemas.catalog import (
     VehicleModelRead,
     VehicleModelUpdate,
 )
-from stockpilot.schemas.common import ErrorResponse, Page
+from stockpilot.schemas.common import DatabaseId, ErrorResponse, Page
 
 router = APIRouter(tags=["catalog"])
 
@@ -37,8 +38,8 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
 @router.get("/vehicle-models")
 def list_vehicle_models(
     service: CatalogServiceDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Limit = 50,
+    offset: Offset = 0,
 ) -> Page[VehicleModelRead]:
     items, total = service.search_models(limit=limit, offset=offset)
     return Page(
@@ -57,13 +58,13 @@ def create_vehicle_model(
 
 
 @router.get("/vehicle-models/{model_id}", responses=_ERRORS)
-def get_vehicle_model(model_id: int, service: CatalogServiceDep) -> VehicleModelRead:
+def get_vehicle_model(model_id: DatabaseId, service: CatalogServiceDep) -> VehicleModelRead:
     return VehicleModelRead.model_validate(service.get_model(model_id))
 
 
 @router.patch("/vehicle-models/{model_id}", responses=_ERRORS)
 def update_vehicle_model(
-    model_id: int, payload: VehicleModelUpdate, service: CatalogServiceDep
+    model_id: DatabaseId, payload: VehicleModelUpdate, service: CatalogServiceDep
 ) -> VehicleModelRead:
     return VehicleModelRead.model_validate(service.rename_model(model_id, payload.name))
 
@@ -71,7 +72,7 @@ def update_vehicle_model(
 @router.delete(
     "/vehicle-models/{model_id}", status_code=status.HTTP_204_NO_CONTENT, responses=_ERRORS
 )
-def delete_vehicle_model(model_id: int, service: CatalogServiceDep) -> Response:
+def delete_vehicle_model(model_id: DatabaseId, service: CatalogServiceDep) -> Response:
     service.delete_model(model_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -80,7 +81,7 @@ def delete_vehicle_model(model_id: int, service: CatalogServiceDep) -> Response:
 
 
 @router.get("/vehicle-models/{model_id}/trims", responses=_ERRORS)
-def list_trims(model_id: int, service: CatalogServiceDep) -> list[TrimRead]:
+def list_trims(model_id: DatabaseId, service: CatalogServiceDep) -> list[TrimRead]:
     # Not paginated: a model has a handful of trims.
     return [TrimRead.model_validate(t) for t in service.list_trims(model_id)]
 
@@ -88,21 +89,21 @@ def list_trims(model_id: int, service: CatalogServiceDep) -> list[TrimRead]:
 @router.post(
     "/vehicle-models/{model_id}/trims", status_code=status.HTTP_201_CREATED, responses=_ERRORS
 )
-def create_trim(model_id: int, payload: TrimCreate, service: CatalogServiceDep) -> TrimRead:
+def create_trim(model_id: DatabaseId, payload: TrimCreate, service: CatalogServiceDep) -> TrimRead:
     return TrimRead.model_validate(service.create_trim(model_id, payload))
 
 
 @router.get("/trims/{trim_id}", responses=_ERRORS)
-def get_trim(trim_id: int, service: CatalogServiceDep) -> TrimRead:
+def get_trim(trim_id: DatabaseId, service: CatalogServiceDep) -> TrimRead:
     return TrimRead.model_validate(service.get_trim(trim_id))
 
 
 @router.patch("/trims/{trim_id}", responses=_ERRORS)
-def update_trim(trim_id: int, payload: TrimUpdate, service: CatalogServiceDep) -> TrimRead:
+def update_trim(trim_id: DatabaseId, payload: TrimUpdate, service: CatalogServiceDep) -> TrimRead:
     return TrimRead.model_validate(service.update_trim(trim_id, payload))
 
 
 @router.delete("/trims/{trim_id}", status_code=status.HTTP_204_NO_CONTENT, responses=_ERRORS)
-def delete_trim(trim_id: int, service: CatalogServiceDep) -> Response:
+def delete_trim(trim_id: DatabaseId, service: CatalogServiceDep) -> Response:
     service.delete_trim(trim_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

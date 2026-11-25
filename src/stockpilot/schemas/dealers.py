@@ -2,16 +2,21 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from stockpilot.schemas.common import MAX_INTEGER, NoNul
+
 DealerCode = Annotated[str, Field(pattern=r"^[A-Z0-9]{2,10}$", examples=["D001"])]
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120), NoNul]
 Province = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=80),
+    NoNul,
     Field(examples=["Córdoba"]),
 ]
 Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
-YardCapacity = Annotated[int, Field(gt=0, description="Max units the dealer yard can hold")]
+YardCapacity = Annotated[
+    int, Field(gt=0, le=MAX_INTEGER, description="Max units the dealer yard can hold")
+]
 
 
 class DealerCreate(BaseModel):
