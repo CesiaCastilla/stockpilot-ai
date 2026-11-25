@@ -8,8 +8,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
+from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.domain.unit_status import UnitStatus
-from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, VehicleModel
+from stockpilot.models import Dealer, Reservation, Sale, TransferOrder, Trim, Unit, VehicleModel
 
 pytestmark = pytest.mark.integration
 
@@ -203,3 +204,61 @@ def test_trim_price_must_be_positive(db_session: Session, trim: Trim, price: int
 
     with pytest.raises(IntegrityError, match="ck_trims_list_price_usd_positive"):
         db_session.flush()
+
+
+# --- Transfer orders ------------------------------------------------------------
+
+
+def _order(
+    session: Session,
+    unit: Unit,
+    destination: Dealer,
+    *,
+    status: TransferOrderStatus = TransferOrderStatus.PENDING,
+) -> TransferOrder:
+    order = TransferOrder(
+        unit=unit,
+        origin_dealer=unit.dealer,
+        destination_dealer=destination,
+        status=status,
+        reason="Shortage",
+    )
+    session.add(order)
+    session.flush()
+    return order
+
+
+def test_unit_can_have_only_one_pending_order(db_session: Session, trim: Trim) -> None:
+    unit = _unit(db_session, trim)
+    _order(db_session, unit, _dealer(db_session, code="D001"))
+
+    with pytest.raises(IntegrityError, match="uq_transfer_orders_pending_unit_id"):
+        _order(db_session, unit, _dealer(db_session, code="D002"))
+
+
+@pytest.mark.parametrize("closed", [TransferOrderStatus.APPROVED, TransferOrderStatus.REJECTED])
+def test_closed_orders_do_not_block_a_new_one(
+    db_session: Session, trim: Trim, closed: TransferOrderStatus
+) -> None:
+    unit, dealer = _unit(db_session, trim), _dealer(db_session)
+    _order(db_session, unit, dealer, status=closed)
+    _order(db_session, unit, dealer, status=closed)
+
+    assert _order(db_session, unit, dealer).id is not None
+
+
+def test_order_cannot_go_back_to_its_origin(db_session: Session, trim: Trim) -> None:
+    dealer = _dealer(db_session)
+    unit = _unit(db_session, trim, dealer=dealer)
+
+    with pytest.raises(IntegrityError, match="ck_transfer_orders_different_dealers"):
+        _order(db_session, unit, dealer)
+
+
+def test_unknown_order_status_is_rejected_by_the_database(db_session: Session, trim: Trim) -> None:
+    order = _order(db_session, _unit(db_session, trim), _dealer(db_session))
+
+    with pytest.raises(IntegrityError, match="ck_transfer_orders_status"):
+        db_session.execute(
+            text("UPDATE transfer_orders SET status = 'maybe' WHERE id = :id"), {"id": order.id}
+        )

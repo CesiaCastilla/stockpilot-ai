@@ -93,6 +93,7 @@ RECENT_SALE_DAYS = 7  # sold but not yet delivered
 TRANSIT_DAYS = (1.0, 4.0)  # trip from the distribution center to a dealer
 
 BUSINESS_TABLES = (
+    "transfer_orders",
     "unit_events",
     "sales",
     "reservations",
