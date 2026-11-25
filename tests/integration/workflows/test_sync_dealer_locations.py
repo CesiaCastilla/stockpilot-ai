@@ -1,5 +1,6 @@
 """The job end to end: settings, HTTP client (mocked network), database and exit code."""
 
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -8,6 +9,7 @@ from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
 from stockpilot.core.config import Settings
+from stockpilot.core.logging import configure_logging
 from stockpilot.models import Dealer
 from stockpilot.workflows.sync_dealer_locations import run
 
@@ -29,8 +31,11 @@ def settings(postgres_url: str, migrated_engine: Engine) -> Iterator[Settings]:
             database_url=postgres_url,
             georef_url="https://georef.example.test",
             http_max_attempts=1,
+            log_format="json",
         )
     finally:
+        # The job pointed the logs to the output captured by the test.
+        configure_logging(Settings())
         with Session(migrated_engine) as session:
             session.execute(delete(Dealer))
             session.commit()
@@ -53,6 +58,25 @@ def test_job_locates_dealers(
 
     assert run(settings) == 0
     assert _latitude(migrated_engine) == -31.4
+
+
+def test_every_event_of_a_run_has_the_same_id(
+    settings: Settings, respx_mock: respx.MockRouter, capsys: pytest.CaptureFixture[str]
+) -> None:
+    respx_mock.post(URL).respond(503)
+
+    run(settings)
+    run(settings)
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [e["message"] for e in events] == [
+        "external_api_failed",
+        "dealer_location_sync_failed",
+    ] * 2
+    first, also_first, second, also_second = (e["correlation_id"] for e in events)
+    assert first == also_first
+    assert second == also_second
+    assert first != second
 
 
 def test_job_reports_a_failure_with_its_exit_code(
