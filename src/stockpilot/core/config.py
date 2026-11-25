@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import PositiveInt
+from pydantic import PositiveFloat, PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     sales_window_days: PositiveInt = 60
     low_coverage_days: PositiveInt = 15
     aged_after_days: PositiveInt = 90
+
+    # External APIs. Timeouts apply to each attempt.
+    http_connect_timeout_seconds: PositiveFloat = 2
+    http_timeout_seconds: PositiveFloat = 5
+    http_max_attempts: PositiveInt = 3
+    dolar_api_url: str = "https://dolarapi.com"
+    exchange_rate_ttl_seconds: PositiveInt = 600
 
 
 @lru_cache
