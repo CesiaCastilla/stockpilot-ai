@@ -24,6 +24,15 @@ class ConflictError(DomainError):
     """The request is valid but contradicts the current state of the data."""
 
 
+class ExternalServiceError(DomainError):
+    """An external API failed or answered something we cannot use."""
+
+    def __init__(self, service: str, reason: str) -> None:
+        self.service = service
+        self.reason = reason
+        super().__init__(f"{service} is not available: {reason}")
+
+
 class InvalidVinError(DomainError):
     def __init__(self, vin: str, reason: str) -> None:
         self.vin = vin

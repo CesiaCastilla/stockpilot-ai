@@ -10,6 +10,7 @@ from stockpilot.domain.errors import (
     AlreadyExistsError,
     ConflictError,
     DomainError,
+    ExternalServiceError,
     InvalidStatusTransitionError,
     InvalidVinError,
     NotFoundError,
@@ -25,6 +26,7 @@ from stockpilot.main import create_app
         (ConflictError("busy"), 409),
         (InvalidStatusTransitionError("sold", "in_yard"), 409),
         (InvalidVinError("X", "too short"), 422),
+        (ExternalServiceError("DolarApi", "timeout"), 502),
     ],
     ids=lambda value: type(value).__name__ if isinstance(value, Exception) else str(value),
 )
