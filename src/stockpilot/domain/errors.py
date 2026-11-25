@@ -40,6 +40,12 @@ class InvalidVinError(DomainError):
         super().__init__(f"Invalid VIN {vin!r}: {reason}")
 
 
+class InvalidTransitDaysError(DomainError):
+    def __init__(self, days: int, maximum: int) -> None:
+        self.days = days
+        super().__init__(f"Transit days must be between 0 and {maximum}, got {days}")
+
+
 class InvalidStatusTransitionError(DomainError):
     def __init__(self, current: str, target: str) -> None:
         self.current = current

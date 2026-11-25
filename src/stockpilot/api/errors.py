@@ -13,6 +13,7 @@ from stockpilot.domain.errors import (
     DomainError,
     ExternalServiceError,
     InvalidStatusTransitionError,
+    InvalidTransitDaysError,
     InvalidVinError,
     NotFoundError,
 )
@@ -23,6 +24,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     ConflictError: status.HTTP_409_CONFLICT,
     InvalidStatusTransitionError: status.HTTP_409_CONFLICT,
     InvalidVinError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    InvalidTransitDaysError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     # 502, not 500: the failure is in a service behind this API.
     ExternalServiceError: status.HTTP_502_BAD_GATEWAY,
 }
