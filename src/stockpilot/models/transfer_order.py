@@ -43,6 +43,8 @@ class TransferOrder(TimestampMixin, Base):
     reason: Mapped[str] = mapped_column(String(500))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejection_reason: Mapped[str | None] = mapped_column(String(500))
+    # The run that proposed it. NULL for orders created outside the agent.
+    agent_run_id: Mapped[int | None] = mapped_column(ForeignKey("agent_runs.id"), index=True)
 
     unit: Mapped[Unit] = relationship()
     origin_dealer: Mapped[Dealer | None] = relationship(foreign_keys=[origin_dealer_id])

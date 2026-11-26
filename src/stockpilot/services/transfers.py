@@ -46,7 +46,9 @@ class TransferService:
         orders = self.orders.search(status=status, limit=limit, offset=offset)
         return orders, self.orders.count(status=status)
 
-    def propose(self, proposal: TransferProposal) -> TransferOrder:
+    def propose(
+        self, proposal: TransferProposal, *, agent_run_id: int | None = None
+    ) -> TransferOrder:
         """Create a pending order, or raise InvalidTransferError with every broken rule."""
         # Locked: what the validator checks is still true when the order is saved.
         unit = self._locked_unit(proposal.vin)
@@ -70,6 +72,7 @@ class TransferService:
                 destination_dealer=destination,
                 status=TransferOrderStatus.PENDING,
                 reason=proposal.reason,
+                agent_run_id=agent_run_id,
             )
         )
         self.session.commit()

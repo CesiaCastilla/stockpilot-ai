@@ -111,6 +111,7 @@ def test_order_shows_what_a_person_needs_to_decide(
         "reason": "Shortage",
         "decided_at": None,
         "rejection_reason": None,
+        "agent_run_id": None,
     }
 
 

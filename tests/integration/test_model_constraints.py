@@ -8,9 +8,19 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
+from stockpilot.domain.agent_runs import AgentRunOutcome, AgentRunStatus, AgentRunTrigger
 from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.domain.unit_status import UnitStatus
-from stockpilot.models import Dealer, Reservation, Sale, TransferOrder, Trim, Unit, VehicleModel
+from stockpilot.models import (
+    AgentRun,
+    Dealer,
+    Reservation,
+    Sale,
+    TransferOrder,
+    Trim,
+    Unit,
+    VehicleModel,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -309,3 +319,72 @@ def test_only_rejected_orders_have_a_rejection_reason(db_session: Session, trim:
             decided_at=DECIDED_AT,
             rejection_reason="No",
         )
+
+
+# --- Agent runs -----------------------------------------------------------------
+
+
+def _run(session: Session, **changes: object) -> AgentRun:
+    run = AgentRun(
+        status=AgentRunStatus.RUNNING,
+        trigger=AgentRunTrigger.API,
+        request={},
+        llm_provider="google_genai",
+        llm_model="gemini",
+        tool_calls=[],
+        submissions=[],
+    )
+    for name, value in changes.items():
+        setattr(run, name, value)
+    session.add(run)
+    session.flush()
+    return run
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"finished_at": DECIDED_AT},  # running, but finished
+        {"status": AgentRunStatus.COMPLETED, "outcome": AgentRunOutcome.PROPOSED},  # no date
+        {"status": AgentRunStatus.COMPLETED, "finished_at": DECIDED_AT},  # no outcome
+        {"status": AgentRunStatus.FAILED, "finished_at": DECIDED_AT},  # no error
+        {"error": "boom"},  # an error, but still running
+        {"outcome": AgentRunOutcome.PROPOSED},  # an outcome, but still running
+    ],
+    ids=[
+        "running-finished",
+        "completed-without-date",
+        "completed-without-outcome",
+        "failed-without-error",
+        "running-with-error",
+        "running-with-outcome",
+    ],
+)
+def test_agent_run_states_must_be_complete(db_session: Session, changes: dict[str, object]) -> None:
+    with pytest.raises(IntegrityError, match="ck_agent_runs_"):
+        _run(db_session, **changes)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        {
+            "status": AgentRunStatus.COMPLETED,
+            "outcome": AgentRunOutcome.NO_PROPOSAL,
+            "finished_at": DECIDED_AT,
+        },
+        {"status": AgentRunStatus.FAILED, "error": "boom", "finished_at": DECIDED_AT},
+    ],
+    ids=["running", "completed", "failed"],
+)
+def test_valid_agent_run_states(db_session: Session, changes: dict[str, object]) -> None:
+    assert _run(db_session, **changes).id is not None
+
+
+def test_an_order_can_only_point_to_an_existing_run(db_session: Session, trim: Trim) -> None:
+    order = _order(db_session, _unit(db_session, trim), _dealer(db_session))
+    order.agent_run_id = 999_999
+
+    with pytest.raises(IntegrityError, match="fk_transfer_orders_agent_run_id_agent_runs"):
+        db_session.flush()

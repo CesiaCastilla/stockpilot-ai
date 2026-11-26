@@ -56,3 +56,4 @@ class TransferOrderRead(BaseModel):
     created_at: datetime
     decided_at: datetime | None
     rejection_reason: str | None
+    agent_run_id: int | None = Field(description="The agent run that proposed it")
