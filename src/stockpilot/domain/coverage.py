@@ -34,6 +34,20 @@ class CoveragePolicy:
             return CoverageStatus.SHORTAGE
         return CoverageStatus.OK
 
+    def units_to_cover(self, *, available: int, recent_sales: int) -> int:
+        """Fewest extra units that take a trim out of shortage. 0 if it is not short.
+
+        Counted with coverage_days and status, not with a formula of its own:
+        the rounding is the same, so the answer can never disagree with them.
+        """
+        extra = 0
+        while (
+            self.status(self.coverage_days(available=available + extra, recent_sales=recent_sales))
+            is CoverageStatus.SHORTAGE
+        ):
+            extra += 1
+        return extra
+
     def sales_since(self, now: datetime) -> datetime:
         return now - timedelta(days=self.sales_window_days)
 

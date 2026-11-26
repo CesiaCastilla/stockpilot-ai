@@ -60,3 +60,35 @@ def test_windows_go_back_from_now() -> None:
 )
 def test_days_in_stock_counts_full_days(age: timedelta, expected: int) -> None:
     assert days_in_stock(NOW - age, NOW) == expected
+
+
+@pytest.mark.parametrize(
+    ("available", "recent_sales", "expected"),
+    [
+        # 15 days at 1 sale a day.
+        pytest.param(0, 60, 15, id="sold-out"),
+        pytest.param(10, 60, 5, id="short"),
+        pytest.param(15, 60, 0, id="exactly-at-the-threshold"),
+        pytest.param(40, 60, 0, id="plenty"),
+        pytest.param(3, 0, 0, id="no-sales-is-not-a-shortage"),
+        # 182 units are 14.96 days, shown as 15.0: that is already enough.
+        pytest.param(182, 730, 0, id="rounded-up-to-the-threshold"),
+        pytest.param(181, 730, 1, id="just-below-after-rounding"),
+        pytest.param(0, 1, 1, id="one-unit-is-60-days"),
+    ],
+)
+def test_units_to_cover(available: int, recent_sales: int, expected: int) -> None:
+    assert POLICY.units_to_cover(available=available, recent_sales=recent_sales) == expected
+
+
+def test_units_to_cover_is_the_fewest_that_end_the_shortage() -> None:
+    def short(available: int, sales: int) -> bool:
+        days = POLICY.coverage_days(available=available, recent_sales=sales)
+        return POLICY.status(days) is CoverageStatus.SHORTAGE
+
+    for sales in range(1, 120):
+        for available in range(40):
+            needed = POLICY.units_to_cover(available=available, recent_sales=sales)
+            assert not short(available + needed, sales)
+            if needed:
+                assert short(available + needed - 1, sales)
