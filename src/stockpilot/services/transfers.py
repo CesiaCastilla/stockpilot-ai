@@ -1,10 +1,15 @@
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
 
+from stockpilot.domain.errors import ConflictError, NotFoundError
 from stockpilot.domain.transfers import (
     InvalidTransferError,
     TransferDestination,
     TransferOrderStatus,
     TransferUnit,
+    check_approval,
     check_transfer,
 )
 from stockpilot.models import Dealer, TransferOrder, Unit
@@ -12,13 +17,14 @@ from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.repositories.transfer_orders import TransferOrderRepository
 from stockpilot.repositories.units import UnitRepository
 from stockpilot.schemas.transfers import TransferProposal
+from stockpilot.services.unit_lifecycle import UnitLifecycle
 
 
 class TransferService:
-    """The only way to create a transfer order, so no proposal skips the validator.
+    """The only way to create and decide transfer orders, so none skips the validator.
 
     Each public method is one transaction. Locks are always taken in the same
-    order, unit and then dealer, so two operations can never wait for each other.
+    sequence (order, unit, dealer), so two operations never wait for each other.
     """
 
     def __init__(self, session: Session) -> None:
@@ -26,6 +32,19 @@ class TransferService:
         self.orders = TransferOrderRepository(session)
         self.units = UnitRepository(session)
         self.dealers = DealerRepository(session)
+        self.lifecycle = UnitLifecycle(session)
+
+    def get(self, order_id: int) -> TransferOrder:
+        order = self.orders.get(order_id)
+        if order is None:
+            raise NotFoundError("Transfer order", order_id)
+        return order
+
+    def search(
+        self, *, status: TransferOrderStatus | None, limit: int = 50, offset: int = 0
+    ) -> tuple[Sequence[TransferOrder], int]:
+        orders = self.orders.search(status=status, limit=limit, offset=offset)
+        return orders, self.orders.count(status=status)
 
     def propose(self, proposal: TransferProposal) -> TransferOrder:
         """Create a pending order, or raise InvalidTransferError with every broken rule."""
@@ -54,6 +73,47 @@ class TransferService:
             )
         )
         self.session.commit()
+        return order
+
+    def approve(self, order_id: int) -> TransferOrder:
+        """Ship the unit and close the order, both or none.
+
+        If the order can no longer be executed it stays pending: closing it is
+        also a decision, and a person takes it by rejecting it.
+        """
+        order = self._locked_pending(order_id)
+        unit = self.units.get_for_update(order.unit_id)
+        destination = self.dealers.get_for_update(order.destination_dealer_id)
+        unit_facts = self._unit_facts(unit)
+        destination_facts = self._destination_facts(destination)
+        # Foreign keys guarantee that both exist. This is for mypy.
+        assert unit is not None and unit_facts is not None and destination_facts is not None
+
+        violations = check_approval(
+            unit=unit_facts, origin_id=order.origin_dealer_id, destination=destination_facts
+        )
+        if violations:
+            raise InvalidTransferError(violations)
+
+        order.decided_at = self.lifecycle.ship(unit, order.destination_dealer_id)
+        order.status = TransferOrderStatus.APPROVED
+        self.session.commit()
+        return order
+
+    def reject(self, order_id: int, reason: str) -> TransferOrder:
+        order = self._locked_pending(order_id)
+        order.decided_at = datetime.now(UTC)
+        order.status = TransferOrderStatus.REJECTED
+        order.rejection_reason = reason
+        self.session.commit()
+        return order
+
+    def _locked_pending(self, order_id: int) -> TransferOrder:
+        order = self.orders.get_for_update(order_id)
+        if order is None:
+            raise NotFoundError("Transfer order", order_id)
+        if order.status is not TransferOrderStatus.PENDING:
+            raise ConflictError(f"Transfer order {order.id} is already {order.status.value}")
         return order
 
     def _locked_unit(self, vin: str) -> Unit | None:

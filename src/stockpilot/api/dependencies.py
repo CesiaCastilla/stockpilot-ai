@@ -12,6 +12,7 @@ from stockpilot.domain.coverage import CoveragePolicy
 from stockpilot.services.catalog import CatalogService
 from stockpilot.services.coverage import CoverageService
 from stockpilot.services.dealers import DealerService
+from stockpilot.services.transfers import TransferService
 from stockpilot.services.units import UnitService
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -36,6 +37,13 @@ def get_unit_service(session: SessionDep) -> UnitService:
 
 
 UnitServiceDep = Annotated[UnitService, Depends(get_unit_service)]
+
+
+def get_transfer_service(session: SessionDep) -> TransferService:
+    return TransferService(session)
+
+
+TransferServiceDep = Annotated[TransferService, Depends(get_transfer_service)]
 
 
 def get_now() -> datetime:

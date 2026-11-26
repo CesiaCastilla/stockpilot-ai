@@ -16,9 +16,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from stockpilot.core.config import Settings
+from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.main import create_app
-from stockpilot.models import Dealer, Trim, Unit, VehicleModel
+from stockpilot.models import Dealer, TransferOrder, Trim, Unit, VehicleModel
 
 pytestmark = pytest.mark.integration
 
@@ -39,6 +40,7 @@ VALID: dict[str, Any] = {
     "city": "X",
     "yard_capacity": 5,
     "list_price_usd": "100.00",
+    "reason": "Shortage",
 }
 
 
@@ -116,7 +118,15 @@ def ids(db_session: Session) -> dict[str, int | str]:
         dealer=dealer,
         received_at=datetime(2026, 6, 1, tzinfo=UTC),
     )
-    db_session.add_all([dealer, unit])
+    destination = Dealer(code="D003", name="X", province="X", city="X", yard_capacity=5)
+    order = TransferOrder(
+        unit=unit,
+        origin_dealer=dealer,
+        destination_dealer=destination,
+        status=TransferOrderStatus.PENDING,
+        reason="Shortage",
+    )
+    db_session.add(order)
     db_session.commit()
     return {
         "dealer_id": dealer.id,
@@ -124,6 +134,7 @@ def ids(db_session: Session) -> dict[str, int | str]:
         "vehicle_model_id": trim.vehicle_model_id,
         "model_id": trim.vehicle_model_id,
         "unit_id": unit.id,
+        "order_id": order.id,
         "vin": VIN,
     }
 

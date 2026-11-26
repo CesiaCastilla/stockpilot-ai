@@ -15,7 +15,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from stockpilot.domain.errors import ConflictError, DomainError, InvalidStatusTransitionError
-from stockpilot.domain.transfers import InvalidTransferError, TransferRule
+from stockpilot.domain.transfers import InvalidTransferError, TransferOrderStatus, TransferRule
 from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.models import Dealer, Sale, TransferOrder, Trim, Unit, UnitEvent, VehicleModel
 from stockpilot.repositories.dealers import DealerRepository
@@ -206,3 +206,137 @@ def test_a_proposal_waits_for_a_sale_in_progress(
 
         with pytest.raises(OperationalError, match="lock timeout"):
             _propose("8AFZZZ12345679999", dealer_id)(proposal)
+
+
+# --- Transfer decisions -----------------------------------------------------------
+
+
+def _commit_order(engine: Engine, unit_id: int, destination_id: int) -> int:
+    # Without the validator: some of these orders no longer fit together.
+    with Session(engine) as session:
+        unit = session.get_one(Unit, unit_id)
+        order = TransferOrder(
+            unit_id=unit_id,
+            origin_dealer_id=unit.dealer_id,
+            destination_dealer_id=destination_id,
+            status=TransferOrderStatus.PENDING,
+            reason="Shortage",
+        )
+        session.add(order)
+        session.commit()
+        return order.id
+
+
+def _count_events(engine: Engine) -> int | None:
+    with Session(engine) as session:
+        return session.scalar(select(func.count()).select_from(UnitEvent))
+
+
+def test_an_order_is_approved_once(migrated_engine: Engine, committed: Committed) -> None:
+    dealer_id = _commit_destination(migrated_engine, capacity=5)
+    order_id = _commit_order(migrated_engine, committed.unit_id, dealer_id)
+
+    results = _run_at_once(migrated_engine, [lambda s: TransferService(s).approve(order_id)] * 2)
+
+    assert results.count(None) == 1
+    (error,) = [r for r in results if r is not None]
+    assert str(error) == f"Transfer order {order_id} is already approved"
+    assert _count_events(migrated_engine) == 1
+
+
+def test_an_order_is_approved_or_rejected_but_not_both(
+    migrated_engine: Engine, committed: Committed
+) -> None:
+    dealer_id = _commit_destination(migrated_engine, capacity=5)
+    order_id = _commit_order(migrated_engine, committed.unit_id, dealer_id)
+
+    results = _run_at_once(
+        migrated_engine,
+        [
+            lambda s: TransferService(s).approve(order_id),
+            lambda s: TransferService(s).reject(order_id, "No"),
+        ],
+    )
+
+    assert results.count(None) == 1
+    assert sum(isinstance(r, ConflictError) for r in results) == 1
+    with Session(migrated_engine) as session:
+        order = session.get_one(TransferOrder, order_id)
+        approved = order.status is TransferOrderStatus.APPROVED
+        # The unit moved only if the approval won.
+        assert (order.unit.status is UnitStatus.IN_TRANSIT) == approved
+
+
+def test_approvals_do_not_exceed_the_yard_capacity(
+    migrated_engine: Engine, committed: Committed
+) -> None:
+    dealer_id = _commit_destination(migrated_engine, capacity=1)
+    with Session(migrated_engine) as session:
+        other = Unit(
+            vin="8AFZZZ12345678888",
+            trim_id=committed.trim_id,
+            color="White",
+            status=UnitStatus.IN_YARD,
+            dealer_id=committed.dealer_id,
+            received_at=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        session.add(other)
+        session.commit()
+        other_id = other.id
+    first = _commit_order(migrated_engine, committed.unit_id, dealer_id)
+    second = _commit_order(migrated_engine, other_id, dealer_id)
+
+    results = _run_at_once(
+        migrated_engine,
+        [
+            lambda s: TransferService(s).approve(first),
+            lambda s: TransferService(s).approve(second),
+        ],
+    )
+
+    assert results.count(None) == 1
+    assert _loser_broke(results, TransferRule.YARD_HAS_ROOM)
+
+
+def test_a_unit_is_sold_or_shipped_but_not_both(
+    migrated_engine: Engine, committed: Committed
+) -> None:
+    dealer_id = _commit_destination(migrated_engine, capacity=5)
+    order_id = _commit_order(migrated_engine, committed.unit_id, dealer_id)
+
+    results = _run_at_once(
+        migrated_engine,
+        [
+            lambda s: TransferService(s).approve(order_id),
+            lambda s: UnitService(s).sell(committed.unit_id),
+        ],
+    )
+
+    assert results.count(None) == 1
+    assert _count_events(migrated_engine) == 1
+
+
+def test_crossed_transfers_do_not_deadlock(migrated_engine: Engine, committed: Committed) -> None:
+    # A -> B and B -> A at the same time.
+    dealer_id = _commit_destination(migrated_engine, capacity=5)
+    with Session(migrated_engine) as session:
+        other = Unit(
+            vin="8AFZZZ12345678888",
+            trim_id=committed.trim_id,
+            color="White",
+            status=UnitStatus.IN_YARD,
+            dealer_id=dealer_id,
+            received_at=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        session.add(other)
+        session.commit()
+        other_id = other.id
+    there = _commit_order(migrated_engine, committed.unit_id, dealer_id)
+    back = _commit_order(migrated_engine, other_id, committed.dealer_id)
+
+    results = _run_at_once(
+        migrated_engine,
+        [lambda s: TransferService(s).approve(there), lambda s: TransferService(s).approve(back)],
+    )
+
+    assert results == [None, None]
