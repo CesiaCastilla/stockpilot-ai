@@ -70,7 +70,8 @@ class DealerRepository:
 
     def delete(self, dealer: Dealer) -> None:
         in_use = ConflictError(
-            f"Dealer {dealer.code} has units, reservations or sales and cannot be deleted"
+            f"Dealer {dealer.code} has units, reservations, sales or transfer orders "
+            "and cannot be deleted"
         )
         with translate_violations(self.session, foreign_key_error=in_use):
             self.session.delete(dealer)

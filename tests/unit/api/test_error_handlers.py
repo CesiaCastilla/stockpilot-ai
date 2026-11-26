@@ -16,6 +16,7 @@ from stockpilot.domain.errors import (
     InvalidVinError,
     NotFoundError,
 )
+from stockpilot.domain.transfers import InvalidTransferError, TransferRule, Violation
 from stockpilot.main import create_app
 
 
@@ -26,6 +27,7 @@ from stockpilot.main import create_app
         (AlreadyExistsError("Dealer", "code", "D001"), 409),
         (ConflictError("busy"), 409),
         (InvalidStatusTransitionError("sold", "in_yard"), 409),
+        (InvalidTransferError([Violation(TransferRule.UNIT_EXISTS, "no unit")]), 409),
         (InvalidVinError("X", "too short"), 422),
         (InvalidTransitDaysError(-1, 365), 422),
         (ExternalServiceError("DolarApi", "timeout"), 502),

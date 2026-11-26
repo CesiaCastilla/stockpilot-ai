@@ -24,9 +24,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
+from stockpilot.agents.checkpoints import CHECKPOINT_TABLES
 from stockpilot.core.config import get_settings
 from stockpilot.core.database import build_engine, build_session_factory
 from stockpilot.domain.unit_status import UnitStatus
@@ -93,6 +94,8 @@ RECENT_SALE_DAYS = 7  # sold but not yet delivered
 TRANSIT_DAYS = (1.0, 4.0)  # trip from the distribution center to a dealer
 
 BUSINESS_TABLES = (
+    "transfer_orders",
+    "agent_runs",
     "unit_events",
     "sales",
     "reservations",
@@ -377,7 +380,12 @@ class DatabaseNotEmptyError(RuntimeError):
 def seed(session: Session, data: DemoData, *, reset: bool = False) -> None:
     """Insert the demo data. The caller owns the transaction (commit or rollback)."""
     if reset:
-        session.execute(text(f"TRUNCATE {', '.join(BUSINESS_TABLES)} RESTART IDENTITY CASCADE"))
+        # The agent's saved states too: run ids start again from 1, and a new run
+        # must never resume the state of an old run with the same id.
+        existing = set(inspect(session.connection()).get_table_names())
+        states = sorted((CHECKPOINT_TABLES - {"checkpoint_migrations"}) & existing)
+        tables = ", ".join([*BUSINESS_TABLES, *states])
+        session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     elif session.scalar(select(func.count()).select_from(Dealer)):
         raise DatabaseNotEmptyError(
             "The database already has data. Run with --reset to wipe it and seed again."

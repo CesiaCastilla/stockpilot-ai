@@ -8,13 +8,25 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
+from stockpilot.domain.agent_runs import AgentRunOutcome, AgentRunStatus, AgentRunTrigger
+from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.domain.unit_status import UnitStatus
-from stockpilot.models import Dealer, Reservation, Sale, Trim, Unit, VehicleModel
+from stockpilot.models import (
+    AgentRun,
+    Dealer,
+    Reservation,
+    Sale,
+    TransferOrder,
+    Trim,
+    Unit,
+    VehicleModel,
+)
 
 pytestmark = pytest.mark.integration
 
 VALID_VIN = "8AFZZZ12345678901"
 RESERVED_AT = datetime(2026, 7, 1, tzinfo=UTC)
+DECIDED_AT = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 def _trim(session: Session, model_name: str = "Pickup X", trim_name: str = "XLT 4x4") -> Trim:
@@ -202,4 +214,177 @@ def test_trim_price_must_be_positive(db_session: Session, trim: Trim, price: int
     trim.list_price_usd = Decimal(price)
 
     with pytest.raises(IntegrityError, match="ck_trims_list_price_usd_positive"):
+        db_session.flush()
+
+
+# --- Transfer orders ------------------------------------------------------------
+
+
+def _order(
+    session: Session,
+    unit: Unit,
+    destination: Dealer,
+    *,
+    status: TransferOrderStatus = TransferOrderStatus.PENDING,
+    decided_at: datetime | None = None,
+    rejection_reason: str | None = None,
+) -> TransferOrder:
+    order = TransferOrder(
+        unit=unit,
+        origin_dealer=unit.dealer,
+        destination_dealer=destination,
+        status=status,
+        reason="Shortage",
+        decided_at=decided_at,
+        rejection_reason=rejection_reason,
+    )
+    session.add(order)
+    session.flush()
+    return order
+
+
+def test_unit_can_have_only_one_pending_order(db_session: Session, trim: Trim) -> None:
+    unit = _unit(db_session, trim)
+    _order(db_session, unit, _dealer(db_session, code="D001"))
+
+    with pytest.raises(IntegrityError, match="uq_transfer_orders_pending_unit_id"):
+        _order(db_session, unit, _dealer(db_session, code="D002"))
+
+
+def test_closed_orders_do_not_block_a_new_one(db_session: Session, trim: Trim) -> None:
+    unit, dealer = _unit(db_session, trim), _dealer(db_session)
+    _order(db_session, unit, dealer, status=TransferOrderStatus.APPROVED, decided_at=DECIDED_AT)
+    _order(
+        db_session,
+        unit,
+        dealer,
+        status=TransferOrderStatus.REJECTED,
+        decided_at=DECIDED_AT,
+        rejection_reason="No",
+    )
+
+    assert _order(db_session, unit, dealer).id is not None
+
+
+def test_order_cannot_go_back_to_its_origin(db_session: Session, trim: Trim) -> None:
+    dealer = _dealer(db_session)
+    unit = _unit(db_session, trim, dealer=dealer)
+
+    with pytest.raises(IntegrityError, match="ck_transfer_orders_different_dealers"):
+        _order(db_session, unit, dealer)
+
+
+def test_unknown_order_status_is_rejected_by_the_database(db_session: Session, trim: Trim) -> None:
+    order = _order(db_session, _unit(db_session, trim), _dealer(db_session))
+
+    with pytest.raises(IntegrityError, match="ck_transfer_orders_status"):
+        db_session.execute(
+            text("UPDATE transfer_orders SET status = 'maybe', decided_at = now() WHERE id = :id"),
+            {"id": order.id},
+        )
+
+
+@pytest.mark.parametrize(
+    ("status", "decided_at", "constraint"),
+    [
+        (TransferOrderStatus.PENDING, DECIDED_AT, "closed_has_date"),
+        (TransferOrderStatus.APPROVED, None, "closed_has_date"),
+        (TransferOrderStatus.REJECTED, DECIDED_AT, "rejected_has_reason"),
+    ],
+)
+def test_order_decision_must_be_complete(
+    db_session: Session,
+    trim: Trim,
+    status: TransferOrderStatus,
+    decided_at: datetime | None,
+    constraint: str,
+) -> None:
+    with pytest.raises(IntegrityError, match=f"ck_transfer_orders_{constraint}"):
+        _order(
+            db_session,
+            _unit(db_session, trim),
+            _dealer(db_session),
+            status=status,
+            decided_at=decided_at,
+        )
+
+
+def test_only_rejected_orders_have_a_rejection_reason(db_session: Session, trim: Trim) -> None:
+    with pytest.raises(IntegrityError, match="ck_transfer_orders_rejected_has_reason"):
+        _order(
+            db_session,
+            _unit(db_session, trim),
+            _dealer(db_session),
+            status=TransferOrderStatus.APPROVED,
+            decided_at=DECIDED_AT,
+            rejection_reason="No",
+        )
+
+
+# --- Agent runs -----------------------------------------------------------------
+
+
+def _run(session: Session, **changes: object) -> AgentRun:
+    run = AgentRun(
+        status=AgentRunStatus.RUNNING,
+        trigger=AgentRunTrigger.API,
+        request={},
+        llm_provider="google_genai",
+        llm_model="gemini",
+        tool_calls=[],
+        submissions=[],
+    )
+    for name, value in changes.items():
+        setattr(run, name, value)
+    session.add(run)
+    session.flush()
+    return run
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"finished_at": DECIDED_AT},  # running, but finished
+        {"status": AgentRunStatus.COMPLETED, "outcome": AgentRunOutcome.PROPOSED},  # no date
+        {"status": AgentRunStatus.COMPLETED, "finished_at": DECIDED_AT},  # no outcome
+        {"status": AgentRunStatus.FAILED, "finished_at": DECIDED_AT},  # no error
+        {"error": "boom"},  # an error, but still running
+        {"outcome": AgentRunOutcome.PROPOSED},  # an outcome, but still running
+    ],
+    ids=[
+        "running-finished",
+        "completed-without-date",
+        "completed-without-outcome",
+        "failed-without-error",
+        "running-with-error",
+        "running-with-outcome",
+    ],
+)
+def test_agent_run_states_must_be_complete(db_session: Session, changes: dict[str, object]) -> None:
+    with pytest.raises(IntegrityError, match="ck_agent_runs_"):
+        _run(db_session, **changes)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        {
+            "status": AgentRunStatus.COMPLETED,
+            "outcome": AgentRunOutcome.NO_PROPOSAL,
+            "finished_at": DECIDED_AT,
+        },
+        {"status": AgentRunStatus.FAILED, "error": "boom", "finished_at": DECIDED_AT},
+    ],
+    ids=["running", "completed", "failed"],
+)
+def test_valid_agent_run_states(db_session: Session, changes: dict[str, object]) -> None:
+    assert _run(db_session, **changes).id is not None
+
+
+def test_an_order_can_only_point_to_an_existing_run(db_session: Session, trim: Trim) -> None:
+    order = _order(db_session, _unit(db_session, trim), _dealer(db_session))
+    order.agent_run_id = 999_999
+
+    with pytest.raises(IntegrityError, match="fk_transfer_orders_agent_run_id_agent_runs"):
         db_session.flush()

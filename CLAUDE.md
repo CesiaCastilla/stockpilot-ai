@@ -87,11 +87,15 @@ docker compose up -d db                   # levantar PostgreSQL 16
 uv run alembic upgrade head               # aplicar migraciones
 uv run python scripts/seed.py             # red ficticia: 30 concesionarios, 2.000 unidades, 180 días de ventas (--reset para regenerar)
 uv run python -m stockpilot.workflows.sync_dealer_locations  # coordenadas y nombres oficiales de concesionarios (Georef)
+uv run python -m stockpilot.workflows.daily_detection   # detección diaria una vez: cobertura, aging y agente si hay faltantes que se pueden cubrir
+uv run python -m stockpilot.workflows.scheduler         # corre la detección todos los días a las 06:00 (DAILY_DETECTION_AT)
 uv run alembic revision --autogenerate -m "describe change"  # nueva migración (revisarla siempre)
 uv run fastapi dev src/stockpilot/main.py # API en :8000 (/health, /docs)
+uv run python scripts/check_llm.py        # prueba el modelo de IA configurado (una llamada; necesita GOOGLE_API_KEY o Ollama)
 uv run pytest                             # tests (sin evals); los de integración necesitan Docker
 uv run pytest -m "not integration"        # solo unitarios, sin Docker
 uv run pytest --cov                       # con cobertura (mínimo 80%, como en CI)
+uv run pytest -m eval                     # evals del agente con el modelo real (no corren en CI); reporte en tests/evals/reports/
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src tests scripts
 ```
@@ -103,7 +107,7 @@ Actualizá esta sección cuando cambien los comandos.
 1. Base: estructura, uv, Docker, CI, modelos y Alembic, datos de prueba. **Hecha.**
 2. API y negocio: CRUD, estados de la unidad y VIN, cobertura y aging, tests. **Hecha.**
 3. Integraciones: vPIC, Georef, DolarApi, feriados (ArgentinaDatos), con mocks. **Hecha.**
-4. Agente IA: grafo, herramientas, validador, aprobación humana, evals. Hito: MVP. **Próxima.**
-5. Automatización y presentación: jobs, runbooks, README final, Postman + Newman, Cloud Run (extra).
+4. Agente IA: grafo, herramientas, validador, aprobación humana, evals y job diario de detección. Hito: MVP. **En curso.**
+5. Automatización y presentación: demás jobs, runbooks, README final, Postman + Newman, Cloud Run (extra).
 
 Actualizá este estado al cerrar cada fase.

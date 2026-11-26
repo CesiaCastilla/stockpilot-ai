@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from stockpilot.domain.coverage import CoverageStatus
+from stockpilot.schemas.common import DatabaseId, Page
 
 
 class TrimCoverage(BaseModel):
@@ -39,3 +40,67 @@ class DealerCoverage(BaseModel):
     aged_after_days: int
 
     trims: list[TrimCoverage]
+
+
+# --- Whole network --------------------------------------------------------------
+
+
+class NetworkFilters(BaseModel):
+    """Narrow the network queries to one model or one trim. Combined with AND."""
+
+    vehicle_model_id: DatabaseId | None = None
+    trim_id: DatabaseId | None = None
+
+
+class Shortage(BaseModel):
+    """One trim that will run out soon at one dealer."""
+
+    dealer_id: int
+    dealer_code: str
+    vehicle_model_id: int
+    vehicle_model_name: str
+    trim_id: int
+    trim_name: str
+
+    in_yard: int
+    in_transit: int
+    recent_sales: int
+    coverage_days: float = Field(description="(in_yard + in_transit) / daily sales")
+
+    pending_arrivals: int = Field(
+        description="Units of this trim in pending transfer orders to this dealer"
+    )
+    units_needed: int = Field(
+        description="Extra units to reach low_coverage_days, counting the pending arrivals. "
+        "0: the pending orders already cover it, if they are approved."
+    )
+    free_places: int = Field(
+        description="Places left in the yard after its stock and every pending order to it. "
+        "More units than this would be rejected by the validator."
+    )
+
+
+class ShortageReport(BaseModel):
+    as_of: datetime
+    sales_window_days: int
+    low_coverage_days: int
+    items: list[Shortage] = Field(description="Lowest coverage first")
+
+
+class AgedUnit(BaseModel):
+    unit_id: int
+    vin: str
+    vehicle_model_id: int
+    vehicle_model_name: str
+    trim_id: int
+    trim_name: str
+    color: str
+    dealer_id: int | None = Field(description="null: at the distribution center")
+    dealer_code: str | None
+    received_at: datetime
+    days_in_stock: int = Field(description="Full days since it entered the network")
+
+
+class AgedUnitPage(Page[AgedUnit]):
+    as_of: datetime
+    min_days: int

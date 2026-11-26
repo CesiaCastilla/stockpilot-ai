@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from scripts.seed import DatabaseNotEmptyError, SeedConfig, build_demo_data, seed
-from stockpilot.models import Dealer, Reservation, Sale, Unit, UnitEvent
+from stockpilot.agents.checkpoints import CheckpointStore
+from stockpilot.domain.agent_runs import AgentRunStatus, AgentRunTrigger
+from stockpilot.models import AgentRun, Dealer, Reservation, Sale, Unit, UnitEvent
 
 pytestmark = pytest.mark.integration
 
@@ -45,3 +47,38 @@ def test_seed_with_reset_replaces_the_existing_data(db_session: Session) -> None
 
     assert _count(db_session, Unit) == len(data.units)
     assert _count(db_session, UnitEvent) == len(data.events)
+
+
+def test_reset_also_wipes_agent_runs_and_their_saved_states(
+    db_session: Session, postgres_url: str
+) -> None:
+    store = CheckpointStore(postgres_url)
+    try:
+        store.saver()  # the checkpoint tables exist, as after any agent run
+    finally:
+        store.close()
+    db_session.add(
+        AgentRun(
+            status=AgentRunStatus.WAITING,
+            trigger=AgentRunTrigger.API,
+            request={},
+            llm_provider="x",
+            llm_model="x",
+            tool_calls=[],
+            submissions=[],
+        )
+    )
+    db_session.execute(
+        text(
+            "INSERT INTO checkpoints"
+            " (thread_id, checkpoint_ns, checkpoint_id, checkpoint, metadata)"
+            " VALUES ('agent-run-1', '', 'c1', '{}', '{}')"
+        )
+    )
+
+    seed(db_session, build_demo_data(SMALL, NOW), reset=True)
+
+    assert _count(db_session, AgentRun) == 0
+    assert db_session.scalar(text("SELECT count(*) FROM checkpoints")) == 0
+    # LangGraph's own record of its tables stays: they are not created again.
+    assert db_session.scalar(text("SELECT count(*) FROM checkpoint_migrations")) > 0

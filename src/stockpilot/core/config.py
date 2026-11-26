@@ -1,10 +1,15 @@
 """Application settings loaded from environment variables (and an optional .env file)."""
 
+from datetime import time
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo
 
-from pydantic import Field, NonNegativeFloat, PositiveFloat, PositiveInt
+from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveFloat, PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from stockpilot.domain.coverage import CoveragePolicy
+from stockpilot.domain.geo import Coordinates
 
 
 class Settings(BaseSettings):
@@ -44,6 +49,39 @@ class Settings(BaseSettings):
     vin_ttl_seconds: PositiveInt = 86_400
     # v1.0 on purpose: v2.0 has no single Buenos Aires city, only its 15 districts.
     georef_url: str = "https://apis.datos.gob.ar/georef/api/v1.0"
+
+    # AI model of the agent. Gemini by default; Ollama runs locally without a key.
+    llm_provider: Literal["google_genai", "ollama"] = "google_genai"
+    llm_model: str = "gemini-3.5-flash-lite"
+    # Only from .env or the environment. SecretStr keeps it out of logs and reprs.
+    google_api_key: SecretStr | None = None
+    ollama_base_url: str = "http://localhost:11434"
+    # 0: the same question gets the same answer as often as possible; evals rely on it.
+    llm_temperature: float = Field(default=0, ge=0, le=2)
+    llm_timeout_seconds: PositiveFloat = 60
+    # Retries of the call itself (network, rate limits), not of a rejected proposal.
+    llm_max_retries: NonNegativeInt = 2
+    # Model calls per agent run: caps its cost and the free tier quota it uses.
+    agent_max_model_calls: int = Field(default=10, ge=2, le=50)
+    # A run still running this long after it started or resumed was left behind
+    # by a process that stopped. One round of 10 model calls, each up to 60 s and
+    # 3 attempts, takes at most 30 minutes: twice that and more is not slow, it is gone.
+    agent_run_abandoned_after_minutes: PositiveInt = 120
+
+    # The daily detection job: when the scheduler runs it, in the network's time zone.
+    daily_detection_at: time = time(6, 0)
+    scheduler_timezone: ZoneInfo = ZoneInfo("America/Argentina/Buenos_Aires")
+
+    # Built here once, so the API, the agent and the jobs all use the same thresholds.
+    def coverage_policy(self) -> CoveragePolicy:
+        return CoveragePolicy(
+            sales_window_days=self.sales_window_days,
+            low_coverage_days=self.low_coverage_days,
+            aged_after_days=self.aged_after_days,
+        )
+
+    def distribution_center(self) -> Coordinates:
+        return Coordinates(self.distribution_center_latitude, self.distribution_center_longitude)
 
 
 @lru_cache

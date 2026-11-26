@@ -1,6 +1,7 @@
 from datetime import datetime
+from enum import StrEnum
 
-from sqlalchemy import DateTime, MetaData, func
+from sqlalchemy import DateTime, Enum, MetaData, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Explicit constraint names make Alembic migrations deterministic and let us
@@ -16,6 +17,22 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+def enum_type(enum_class: type[StrEnum], *, name: str) -> Enum:
+    """Column type for a StrEnum. `name` names its CHECK constraint, unique per table.
+
+    Stored as VARCHAR + CHECK instead of a native PostgreSQL ENUM: adding a
+    value later is a plain migration, not an ALTER TYPE.
+    """
+    return Enum(
+        enum_class,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        length=20,
+        values_callable=lambda members: [m.value for m in members],
+    )
 
 
 class TimestampMixin:

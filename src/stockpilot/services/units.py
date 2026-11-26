@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from stockpilot.domain.errors import ConflictError, InvalidStatusTransitionError, NotFoundError
-from stockpilot.domain.unit_status import STOCK_STATUSES, UnitStatus, ensure_transition
+from stockpilot.domain.errors import ConflictError, NotFoundError
+from stockpilot.domain.unit_status import STOCK_STATUSES, UnitStatus
 from stockpilot.domain.vin import parse_vin
 from stockpilot.models import Dealer, Reservation, Sale, Unit, UnitEvent
 from stockpilot.repositories.catalog import TrimRepository
@@ -12,13 +12,13 @@ from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.repositories.sales import SalesRepository
 from stockpilot.repositories.units import UnitRepository
 from stockpilot.schemas.units import UnitCreate, UnitFilters, UnitUpdate
+from stockpilot.services.unit_lifecycle import UnitLifecycle
 
 
 class UnitService:
     """Unit registration, lifecycle and queries. Each public method is one transaction.
 
-    Every status change of a unit goes through this service, so it always
-    leaves a UnitEvent behind.
+    Status changes go through UnitLifecycle, so they always leave a UnitEvent behind.
     """
 
     def __init__(self, session: Session) -> None:
@@ -27,6 +27,7 @@ class UnitService:
         self.trims = TrimRepository(session)
         self.dealers = DealerRepository(session)
         self.sales = SalesRepository(session)
+        self.lifecycle = UnitLifecycle(session)
 
     def get(self, unit_id: int) -> Unit:
         unit = self.units.get(unit_id)
@@ -75,7 +76,7 @@ class UnitService:
                 vin=vin, trim=trim, color=data.color, status=status, dealer=dealer, received_at=now
             )
         )
-        self._record(unit, from_status=None, now=now)
+        self.lifecycle.record_registration(unit, now=now)
         self.session.commit()
         return unit
 
@@ -107,14 +108,14 @@ class UnitService:
         """The unit reaches its destination yard. received_at does not change:
         aging counts since it entered the network."""
         unit = self._locked(unit_id)
-        self._change_status(unit, UnitStatus.IN_YARD, only_from=UnitStatus.IN_TRANSIT)
+        self.lifecycle.change(unit, UnitStatus.IN_YARD, only_from=UnitStatus.IN_TRANSIT)
         self.session.commit()
         return unit
 
     def reserve(self, unit_id: int) -> Unit:
         unit = self._locked(unit_id)
         dealer_id = self._selling_dealer(unit)  # every check runs before any change
-        now = self._change_status(unit, UnitStatus.RESERVED)
+        now = self.lifecycle.change(unit, UnitStatus.RESERVED)
         self.sales.add_reservation(
             Reservation(unit_id=unit.id, dealer_id=dealer_id, reserved_at=now)
         )
@@ -123,7 +124,7 @@ class UnitService:
 
     def cancel_reservation(self, unit_id: int) -> Unit:
         unit = self._locked(unit_id)
-        now = self._change_status(unit, UnitStatus.IN_YARD, only_from=UnitStatus.RESERVED)
+        now = self.lifecycle.change(unit, UnitStatus.IN_YARD, only_from=UnitStatus.RESERVED)
         # Closed, not deleted: the reservation stays in the history.
         self.sales.active_reservation(unit.id).cancelled_at = now
         self.session.commit()
@@ -134,14 +135,14 @@ class UnitService:
         not cancelled: cancelled_at stays NULL."""
         unit = self._locked(unit_id)
         dealer_id = self._selling_dealer(unit)
-        now = self._change_status(unit, UnitStatus.SOLD)
+        now = self.lifecycle.change(unit, UnitStatus.SOLD)
         self.sales.add_sale(Sale(unit_id=unit.id, dealer_id=dealer_id, sold_at=now))
         self.session.commit()
         return unit
 
     def deliver(self, unit_id: int) -> Unit:
         unit = self._locked(unit_id)
-        self._change_status(unit, UnitStatus.DELIVERED)
+        self.lifecycle.change(unit, UnitStatus.DELIVERED)
         self.session.commit()
         return unit
 
@@ -152,36 +153,6 @@ class UnitService:
         if unit is None:
             raise NotFoundError("Unit", unit_id)
         return unit
-
-    def _change_status(
-        self, unit: Unit, target: UnitStatus, *, only_from: UnitStatus | None = None
-    ) -> datetime:
-        """Apply a transition, record its event and return when it happened.
-
-        only_from narrows the status machine when two operations share a
-        target: "arrive" and "cancel reservation" both end in the yard, and
-        arriving must not release a reserved unit.
-        """
-        if only_from is not None and unit.status is not only_from:
-            raise InvalidStatusTransitionError(unit.status.value, target.value)
-        ensure_transition(unit.status, target)
-
-        now = datetime.now(UTC)
-        previous = unit.status
-        unit.status = target
-        self._record(unit, from_status=previous, now=now)
-        return now
-
-    def _record(self, unit: Unit, *, from_status: UnitStatus | None, now: datetime) -> None:
-        self.units.add_event(
-            UnitEvent(
-                unit_id=unit.id,
-                from_status=from_status,
-                to_status=unit.status,
-                dealer_id=unit.dealer_id,
-                occurred_at=now,
-            )
-        )
 
     @staticmethod
     def _selling_dealer(unit: Unit) -> int:

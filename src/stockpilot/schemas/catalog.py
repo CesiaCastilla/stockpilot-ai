@@ -5,8 +5,10 @@ from typing import Annotated, Self
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from stockpilot.schemas.common import NoNul
+
 # Same limit as the String(80) columns, so the database never truncates or rejects.
-CatalogName = Annotated[str, Field(min_length=1, max_length=80)]
+CatalogName = Annotated[str, Field(min_length=1, max_length=80), NoNul]
 # Same size as the Numeric(10, 2) column. Always two decimals, so the API answers
 # the same text before and after the price goes through the database.
 ListPrice = Annotated[

@@ -3,7 +3,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query, status
 
 from stockpilot.api.dependencies import UnitServiceDep
-from stockpilot.schemas.common import ErrorResponse, Page
+from stockpilot.api.params import Limit, Offset, VinPath
+from stockpilot.schemas.common import DatabaseId, ErrorResponse, Page
 from stockpilot.schemas.units import UnitCreate, UnitEventRead, UnitFilters, UnitRead, UnitUpdate
 
 router = APIRouter(prefix="/units", tags=["units"])
@@ -21,8 +22,8 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
 def list_units(
     service: UnitServiceDep,
     filters: Annotated[UnitFilters, Query()],
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Limit = 50,
+    offset: Offset = 0,
 ) -> Page[UnitRead]:
     """Units sorted by received_at, oldest first."""
     items, total = service.search(filters, limit=limit, offset=offset)
@@ -40,23 +41,23 @@ def register_unit(payload: UnitCreate, service: UnitServiceDep) -> UnitRead:
 
 
 @router.get("/by-vin/{vin}", responses=_ERRORS)
-def get_unit_by_vin(vin: str, service: UnitServiceDep) -> UnitRead:
+def get_unit_by_vin(vin: VinPath, service: UnitServiceDep) -> UnitRead:
     return UnitRead.model_validate(service.get_by_vin(vin))
 
 
 @router.get("/{unit_id}", responses=_ERRORS)
-def get_unit(unit_id: int, service: UnitServiceDep) -> UnitRead:
+def get_unit(unit_id: DatabaseId, service: UnitServiceDep) -> UnitRead:
     return UnitRead.model_validate(service.get(unit_id))
 
 
 @router.patch("/{unit_id}", responses=_ERRORS)
-def update_unit(unit_id: int, payload: UnitUpdate, service: UnitServiceDep) -> UnitRead:
+def update_unit(unit_id: DatabaseId, payload: UnitUpdate, service: UnitServiceDep) -> UnitRead:
     """Correct the trim or the color of a unit in stock."""
     return UnitRead.model_validate(service.update(unit_id, payload))
 
 
 @router.get("/{vin}/history", responses=_ERRORS)
-def get_unit_history(vin: str, service: UnitServiceDep) -> list[UnitEventRead]:
+def get_unit_history(vin: VinPath, service: UnitServiceDep) -> list[UnitEventRead]:
     """Status changes of the unit, oldest first. Not paginated: a unit has a handful."""
     return [UnitEventRead.model_validate(e) for e in service.history(vin)]
 
@@ -67,29 +68,29 @@ def get_unit_history(vin: str, service: UnitServiceDep) -> list[UnitEventRead]:
 
 
 @router.post("/{unit_id}/arrive", responses=_ERRORS)
-def arrive(unit_id: int, service: UnitServiceDep) -> UnitRead:
+def arrive(unit_id: DatabaseId, service: UnitServiceDep) -> UnitRead:
     """The unit in transit reaches its destination yard."""
     return UnitRead.model_validate(service.arrive(unit_id))
 
 
 @router.post("/{unit_id}/reserve", responses=_ERRORS)
-def reserve(unit_id: int, service: UnitServiceDep) -> UnitRead:
+def reserve(unit_id: DatabaseId, service: UnitServiceDep) -> UnitRead:
     return UnitRead.model_validate(service.reserve(unit_id))
 
 
 @router.post("/{unit_id}/cancel-reservation", responses=_ERRORS)
-def cancel_reservation(unit_id: int, service: UnitServiceDep) -> UnitRead:
+def cancel_reservation(unit_id: DatabaseId, service: UnitServiceDep) -> UnitRead:
     """The reservation is closed and the unit is available again."""
     return UnitRead.model_validate(service.cancel_reservation(unit_id))
 
 
 @router.post("/{unit_id}/sell", responses=_ERRORS)
-def sell(unit_id: int, service: UnitServiceDep) -> UnitRead:
+def sell(unit_id: DatabaseId, service: UnitServiceDep) -> UnitRead:
     """Sell a unit in the yard, or turn its reservation into a sale."""
     return UnitRead.model_validate(service.sell(unit_id))
 
 
 @router.post("/{unit_id}/deliver", responses=_ERRORS)
-def deliver(unit_id: int, service: UnitServiceDep) -> UnitRead:
+def deliver(unit_id: DatabaseId, service: UnitServiceDep) -> UnitRead:
     """Hand the sold unit to its customer."""
     return UnitRead.model_validate(service.deliver(unit_id))
