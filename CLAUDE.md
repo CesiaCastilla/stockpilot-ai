@@ -87,6 +87,8 @@ docker compose up -d db                   # levantar PostgreSQL 16
 uv run alembic upgrade head               # aplicar migraciones
 uv run python scripts/seed.py             # red ficticia: 30 concesionarios, 2.000 unidades, 180 días de ventas (--reset para regenerar)
 uv run python -m stockpilot.workflows.sync_dealer_locations  # coordenadas y nombres oficiales de concesionarios (Georef)
+uv run python -m stockpilot.workflows.daily_detection   # detección diaria una vez: cobertura, aging y agente si hay faltantes que se pueden cubrir
+uv run python -m stockpilot.workflows.scheduler         # corre la detección todos los días a las 06:00 (DAILY_DETECTION_AT)
 uv run alembic revision --autogenerate -m "describe change"  # nueva migración (revisarla siempre)
 uv run fastapi dev src/stockpilot/main.py # API en :8000 (/health, /docs)
 uv run python scripts/check_llm.py        # prueba el modelo de IA configurado (una llamada; necesita GOOGLE_API_KEY o Ollama)

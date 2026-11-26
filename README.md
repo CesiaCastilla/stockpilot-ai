@@ -32,6 +32,17 @@ Start a run with `POST /api/v1/agent/runs` and follow it with `GET /api/v1/agent
 
 To run without a key, use a local model with [Ollama](https://ollama.com) that supports tool calling: set `LLM_PROVIDER=ollama` and `LLM_MODEL` (for example `qwen3:8b`). Tests never call a real model.
 
+## Daily detection
+
+Every morning at 06:00 (Buenos Aires time), a job measures coverage and aging across the network and, if a transfer can fix some shortage, starts the agent. Its proposals wait for people like any other. On a morning with nothing to fix, it does not call the model at all.
+
+```bash
+uv run python -m stockpilot.workflows.daily_detection   # run it once, now
+uv run python -m stockpilot.workflows.scheduler         # run it every day at DAILY_DETECTION_AT
+```
+
+The scheduler is a process of its own, not part of the API: every API worker would run the job again. The job skips a day when another agent run is in progress, and first marks as failed any run left `running` by a process that stopped (`AGENT_RUN_ABANDONED_AFTER_MINUTES`). Its exit code is 1 when there is no AI model or the run failed, so any scheduler can tell.
+
 ## Agent evals
 
 `tests/evals/scenarios.yaml` holds 19 business scenarios: a dealer sold out with aged units elsewhere, a full yard, the only unit reserved, a shortage with no unit anywhere, a rejected transfer that needs a replacement, and more. Each one declares what the run must achieve, not the exact text, and every run is also checked for invented VINs, wrong trims or destinations, more units than needed, older units left behind and false numbers in the reasons.

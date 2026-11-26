@@ -130,6 +130,14 @@ class CoverageService:
             min_days=days,
         )
 
+    def count_aged_units(self, filters: NetworkFilters, *, now: datetime) -> int:
+        """How many movable units are past the aging threshold."""
+        return self.coverage.count_aged_units(
+            received_before=now - timedelta(days=self.policy.aged_after_days),
+            trim_id=filters.trim_id,
+            vehicle_model_id=filters.vehicle_model_id,
+        )
+
     def _short_pairs(self, now: datetime) -> set[tuple[int, int]]:
         rows = self.coverage.network_by_trim(sales_since=self.policy.sales_since(now), now=now)
         return {(r.dealer_id, r.trim_id) for r in rows if self._shortage(r) is not None}
@@ -200,3 +208,10 @@ def _aged_unit(row: AgedUnitRow, now: datetime) -> AgedUnit:
         received_at=row.received_at,
         days_in_stock=days_in_stock(row.received_at, now),
     )
+
+
+def can_be_served(shortage: Shortage) -> bool:
+    """A transfer can fix it: it still needs units after the pending orders, and
+    its yard has room for them. The agent sees only these, and the daily job
+    calls the agent only if there is one."""
+    return shortage.units_needed > 0 and shortage.free_places > 0

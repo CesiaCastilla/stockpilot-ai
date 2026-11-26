@@ -29,7 +29,7 @@ from stockpilot.integrations.dolarapi import build_dolar_api
 from stockpilot.integrations.vpic import build_vpic
 from stockpilot.schemas.common import DatabaseId, NoNul
 from stockpilot.schemas.coverage import NetworkFilters
-from stockpilot.services.coverage import CoverageService
+from stockpilot.services.coverage import CoverageService, can_be_served
 from stockpilot.services.delivery import DeliveryService, HolidayCalendar
 from stockpilot.services.distance import DistanceService
 from stockpilot.services.stock_value import ExchangeRateSource, StockValueService
@@ -128,7 +128,7 @@ def build_tools(ctx: ToolContext) -> list[BaseTool]:
             report = CoverageService(session, ctx.policy).shortages(filters, now=ctx.clock())
         # Decided here, not left to the model: the evals showed it sometimes
         # proposed transfers to a full yard. These go apart, with the reason.
-        actionable = [s for s in report.items if s.units_needed and s.free_places]
+        actionable = [s for s in report.items if can_be_served(s)]
         cannot_be_served = [
             {
                 "dealer_code": s.dealer_code,
@@ -137,7 +137,7 @@ def build_tools(ctx: ToolContext) -> list[BaseTool]:
                 "why": "the yard is full" if not s.free_places else "pending orders cover it",
             }
             for s in report.items
-            if not (s.units_needed and s.free_places)
+            if not can_be_served(s)
         ]
         return {
             **report.model_dump(exclude={"items"}),

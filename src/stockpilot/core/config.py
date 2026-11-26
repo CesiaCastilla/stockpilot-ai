@@ -1,7 +1,9 @@
 """Application settings loaded from environment variables (and an optional .env file)."""
 
+from datetime import time
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveFloat, PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -61,6 +63,14 @@ class Settings(BaseSettings):
     llm_max_retries: NonNegativeInt = 2
     # Model calls per agent run: caps its cost and the free tier quota it uses.
     agent_max_model_calls: int = Field(default=10, ge=2, le=50)
+    # A run still running this long after it started or resumed was left behind
+    # by a process that stopped. One round of 10 model calls, each up to 60 s and
+    # 3 attempts, takes at most 30 minutes: twice that and more is not slow, it is gone.
+    agent_run_abandoned_after_minutes: PositiveInt = 120
+
+    # The daily detection job: when the scheduler runs it, in the network's time zone.
+    daily_detection_at: time = time(6, 0)
+    scheduler_timezone: ZoneInfo = ZoneInfo("America/Argentina/Buenos_Aires")
 
     # Built here once, so the API, the agent and the jobs all use the same thresholds.
     def coverage_policy(self) -> CoveragePolicy:
