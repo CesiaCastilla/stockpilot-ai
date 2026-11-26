@@ -3,8 +3,11 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, NonNegativeFloat, PositiveFloat, PositiveInt
+from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveFloat, PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from stockpilot.domain.coverage import CoveragePolicy
+from stockpilot.domain.geo import Coordinates
 
 
 class Settings(BaseSettings):
@@ -44,6 +47,29 @@ class Settings(BaseSettings):
     vin_ttl_seconds: PositiveInt = 86_400
     # v1.0 on purpose: v2.0 has no single Buenos Aires city, only its 15 districts.
     georef_url: str = "https://apis.datos.gob.ar/georef/api/v1.0"
+
+    # AI model of the agent. Gemini by default; Ollama runs locally without a key.
+    llm_provider: Literal["google_genai", "ollama"] = "google_genai"
+    llm_model: str = "gemini-3.5-flash-lite"
+    # Only from .env or the environment. SecretStr keeps it out of logs and reprs.
+    google_api_key: SecretStr | None = None
+    ollama_base_url: str = "http://localhost:11434"
+    # 0: the same question gets the same answer as often as possible; evals rely on it.
+    llm_temperature: float = Field(default=0, ge=0, le=2)
+    llm_timeout_seconds: PositiveFloat = 60
+    # Retries of the call itself (network, rate limits), not of a rejected proposal.
+    llm_max_retries: NonNegativeInt = 2
+
+    # Built here once, so the API, the agent and the jobs all use the same thresholds.
+    def coverage_policy(self) -> CoveragePolicy:
+        return CoveragePolicy(
+            sales_window_days=self.sales_window_days,
+            low_coverage_days=self.low_coverage_days,
+            aged_after_days=self.aged_after_days,
+        )
+
+    def distribution_center(self) -> Coordinates:
+        return Coordinates(self.distribution_center_latitude, self.distribution_center_longitude)
 
 
 @lru_cache

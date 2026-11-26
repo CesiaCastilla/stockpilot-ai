@@ -57,11 +57,7 @@ NowDep = Annotated[datetime, Depends(get_now)]
 def get_coverage_policy(request: Request) -> CoveragePolicy:
     # The settings the app was created with, not the global ones.
     settings: Settings = request.app.state.settings
-    return CoveragePolicy(
-        sales_window_days=settings.sales_window_days,
-        low_coverage_days=settings.low_coverage_days,
-        aged_after_days=settings.aged_after_days,
-    )
+    return settings.coverage_policy()
 
 
 def get_coverage_service(
