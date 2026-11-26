@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 import structlog
@@ -26,6 +26,11 @@ logger = structlog.get_logger(__name__)
 
 # The error is stored for people to read, not to keep a whole traceback.
 MAX_ERROR_LENGTH = 2000
+
+ABANDONED = (
+    "Still running {minutes} minutes after it started or resumed: the process running it "
+    "stopped. What it did up to its last saved step is kept; its pending orders stay pending."
+)
 
 
 # Called only when the graph needs the model, so a run whose orders were all
@@ -121,6 +126,39 @@ class AgentRunService:
             runs = AgentRunRepository(session)
             return runs.search(limit=limit, offset=offset), runs.count()
 
+    def any_running(self) -> bool:
+        with self._session_factory() as session:
+            return AgentRunRepository(session).any_running()
+
+    def fail_abandoned(self, older_than: timedelta) -> list[int]:
+        """Mark as failed the runs a stopped process left running, with what they
+        did up to their last saved step. Otherwise they would look alive forever.
+
+        Not resumed from the checkpoint: a process that died right after creating
+        an order, before saving the step, would propose it again on replay.
+        """
+        with self._session_factory() as session:
+            found = [run.id for run in AgentRunRepository(session).abandoned(older_than)]
+        if not found:
+            return []
+        # Read with no transaction open: on its first use the checkpointer creates
+        # its indexes CONCURRENTLY, which waits for every open transaction to end.
+        # Holding the rows locked meanwhile, the job would wait for itself forever.
+        states = {run_id: self._saved_state(_thread(run_id)) for run_id in found}
+        with self._session_factory() as session:
+            # Locked and checked again: one may have ended or resumed in between.
+            runs = AgentRunRepository(session).abandoned(older_than, among=found)
+            for run in runs:
+                _copy_state(run, states[run.id])
+                run.status = AgentRunStatus.FAILED
+                run.error = ABANDONED.format(minutes=int(older_than.total_seconds() // 60))
+                run.finished_at = self._clock()
+            session.commit()
+            failed = [run.id for run in runs]
+        for run_id in failed:
+            logger.warning("agent_run_abandoned", agent_run_id=run_id)
+        return failed
+
     def _advance(
         self,
         run_id: int,
@@ -133,11 +171,8 @@ class AgentRunService:
                 return TransferService(session).propose(proposal, agent_run_id=run_id).id
 
         log = logger.bind(agent_run_id=run_id)
-        config: RunnableConfig = {
-            # One thread per run: the checkpointer keeps its state under this id.
-            "configurable": {"thread_id": f"agent-run-{run_id}"},
-            "recursion_limit": 4 * self._max_model_calls,
-        }
+        config = _thread(run_id)
+        config["recursion_limit"] = 4 * self._max_model_calls
         try:
             graph = build_graph(
                 model,
@@ -185,14 +220,7 @@ class AgentRunService:
         with self._session_factory() as session:
             run = AgentRunRepository(session).get(run_id)
             assert run is not None  # it was read when the run began
-            if state is not None:
-                run.tool_calls = state.get("tool_calls", [])
-                run.submissions = state.get("submissions", [])
-                run.model_calls = state.get("model_calls", 0)
-                run.input_tokens = state.get("input_tokens", 0)
-                run.output_tokens = state.get("output_tokens", 0)
-                run.summary = _summary(state)
-                run.stop_reason = state.get("stop")
+            _copy_state(run, state)
             if error is not None:
                 run.status = AgentRunStatus.FAILED
                 run.error = error[:MAX_ERROR_LENGTH]
@@ -205,6 +233,24 @@ class AgentRunService:
                 run.finished_at = self._clock()
             session.commit()
             return run
+
+
+def _thread(run_id: int) -> RunnableConfig:
+    # One thread per run: the checkpointer keeps its state under this id.
+    return {"configurable": {"thread_id": f"agent-run-{run_id}"}}
+
+
+def _copy_state(run: AgentRun, state: AgentState | None) -> None:
+    """What the graph did, into the audit row."""
+    if state is None:
+        return
+    run.tool_calls = state.get("tool_calls", [])
+    run.submissions = state.get("submissions", [])
+    run.model_calls = state.get("model_calls", 0)
+    run.input_tokens = state.get("input_tokens", 0)
+    run.output_tokens = state.get("output_tokens", 0)
+    run.summary = _summary(state)
+    run.stop_reason = state.get("stop")
 
 
 def _outcome(state: AgentState) -> AgentRunOutcome:
