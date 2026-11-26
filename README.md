@@ -20,6 +20,16 @@ uv run fastapi dev src/stockpilot/main.py
 
 Then open http://localhost:8000/health (API and database status) or http://localhost:8000/docs (OpenAPI).
 
+## AI model
+
+The agent uses Gemini by default. Create a free API key in [Google AI Studio](https://aistudio.google.com/apikey), put it in `.env` as `GOOGLE_API_KEY` (never in Git), and check it:
+
+```bash
+uv run python scripts/check_llm.py   # one request: prints the tool the model asked for
+```
+
+To run without a key, use a local model with [Ollama](https://ollama.com) that supports tool calling: set `LLM_PROVIDER=ollama` and `LLM_MODEL` (for example `qwen3:8b`). Tests never call a real model.
+
 ## Development
 
 ```bash

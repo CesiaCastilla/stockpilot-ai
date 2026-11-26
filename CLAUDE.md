@@ -89,6 +89,7 @@ uv run python scripts/seed.py             # red ficticia: 30 concesionarios, 2.0
 uv run python -m stockpilot.workflows.sync_dealer_locations  # coordenadas y nombres oficiales de concesionarios (Georef)
 uv run alembic revision --autogenerate -m "describe change"  # nueva migración (revisarla siempre)
 uv run fastapi dev src/stockpilot/main.py # API en :8000 (/health, /docs)
+uv run python scripts/check_llm.py        # prueba el modelo de IA configurado (una llamada; necesita GOOGLE_API_KEY o Ollama)
 uv run pytest                             # tests (sin evals); los de integración necesitan Docker
 uv run pytest -m "not integration"        # solo unitarios, sin Docker
 uv run pytest --cov                       # con cobertura (mínimo 80%, como en CI)
