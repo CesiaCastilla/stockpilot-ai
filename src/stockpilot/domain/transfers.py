@@ -1,7 +1,7 @@
 """Rules a transfer must pass. Pure functions: no database, no AI."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from stockpilot.domain.errors import DomainError
@@ -22,6 +22,7 @@ class TransferRule(StrEnum):
     DESTINATION_EXISTS = "destination_exists"
     DIFFERENT_DESTINATION = "different_destination"
     YARD_HAS_ROOM = "yard_has_room"
+    UNIT_AT_ORIGIN = "unit_at_origin"
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,30 @@ def check_transfer(
             Violation(
                 TransferRule.DIFFERENT_DESTINATION,
                 f"Unit {unit.vin} is already assigned to dealer {destination_id}",
+            )
+        )
+    return violations
+
+
+def check_approval(
+    *, unit: TransferUnit, origin_id: int | None, destination: TransferDestination
+) -> list[Violation]:
+    """The rules again, when a person approves: the stock may have changed since the proposal.
+
+    Pending orders do not count now: one of them is the order being approved,
+    and the others do not take a place until they are approved too.
+    """
+    violations = check_transfer(
+        vin=unit.vin,
+        unit=replace(unit, has_pending_order=False),
+        destination_id=destination.dealer_id,
+        destination=replace(destination, pending_arrivals=0),
+    )
+    if unit.dealer_id != origin_id:
+        violations.append(
+            Violation(
+                TransferRule.UNIT_AT_ORIGIN,
+                f"Unit {unit.vin} is not where it was when the order was proposed",
             )
         )
     return violations

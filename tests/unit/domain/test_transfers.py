@@ -10,6 +10,7 @@ from stockpilot.domain.transfers import (
     TransferRule,
     TransferUnit,
     Violation,
+    check_approval,
     check_transfer,
 )
 from stockpilot.domain.unit_status import UnitStatus
@@ -104,3 +105,45 @@ def test_error_keeps_every_violation() -> None:
         TransferRule.DESTINATION_EXISTS,
     ]
     assert str(error) == f"Unit {VIN} does not exist; Dealer 2 does not exist"
+
+
+# --- Approval -------------------------------------------------------------------
+
+
+def _check_approval(
+    unit: TransferUnit = UNIT,
+    destination: TransferDestination = DESTINATION,
+    origin_id: int | None = 1,
+) -> list[TransferRule]:
+    violations = check_approval(unit=unit, origin_id=origin_id, destination=destination)
+    return [v.rule for v in violations]
+
+
+def test_the_order_being_approved_does_not_block_itself() -> None:
+    unit = replace(UNIT, has_pending_order=True)
+    destination = replace(DESTINATION, stock_units=9, pending_arrivals=1)
+
+    assert _check_approval(unit, destination) == []
+
+
+@pytest.mark.parametrize(("stock", "fits"), [(9, True), (10, False)])
+def test_approval_needs_room_in_the_yard(stock: int, fits: bool) -> None:
+    rules = _check_approval(destination=replace(DESTINATION, stock_units=stock))
+
+    assert rules == ([] if fits else [TransferRule.YARD_HAS_ROOM])
+
+
+@pytest.mark.parametrize("status", [s for s in UnitStatus if s is not UnitStatus.IN_YARD])
+def test_approval_needs_the_unit_in_a_yard(status: UnitStatus) -> None:
+    assert _check_approval(replace(UNIT, status=status)) == [TransferRule.UNIT_AVAILABLE]
+
+
+@pytest.mark.parametrize(("dealer_id", "origin_id"), [(3, 1), (None, 1), (3, None)])
+def test_approval_needs_the_unit_where_it_was(dealer_id: int | None, origin_id: int | None) -> None:
+    unit = replace(UNIT, dealer_id=dealer_id)
+
+    assert _check_approval(unit, origin_id=origin_id) == [TransferRule.UNIT_AT_ORIGIN]
+
+
+def test_unit_still_at_the_distribution_center_can_be_approved() -> None:
+    assert _check_approval(replace(UNIT, dealer_id=None), origin_id=None) == []

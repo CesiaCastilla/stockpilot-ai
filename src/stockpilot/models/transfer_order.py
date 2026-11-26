@@ -1,4 +1,6 @@
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String, text
+from datetime import datetime
+
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from stockpilot.domain.transfers import TransferOrderStatus
@@ -14,6 +16,11 @@ class TransferOrder(TimestampMixin, Base):
     __table_args__ = (
         # A NULL origin passes: the distribution center is never the destination.
         CheckConstraint("origin_dealer_id <> destination_dealer_id", name="different_dealers"),
+        # A closed order always says when, and a rejected one also why.
+        CheckConstraint("(status = 'pending') = (decided_at IS NULL)", name="closed_has_date"),
+        CheckConstraint(
+            "(status = 'rejected') = (rejection_reason IS NOT NULL)", name="rejected_has_reason"
+        ),
         # A unit can have many closed orders, but only one waiting for a decision.
         Index(
             "uq_transfer_orders_pending_unit_id",
@@ -34,6 +41,8 @@ class TransferOrder(TimestampMixin, Base):
     )
     # Why it was proposed: what the person who decides reads.
     reason: Mapped[str] = mapped_column(String(500))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str | None] = mapped_column(String(500))
 
     unit: Mapped[Unit] = relationship()
     origin_dealer: Mapped[Dealer | None] = relationship(foreign_keys=[origin_dealer_id])

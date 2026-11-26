@@ -92,6 +92,7 @@ def units_in_stock(db_session: Session, trim: Trim, count: int, code: str) -> No
 @given(parsers.parse('a {status} order to move "{vin}" to "{code}"'))
 def existing_order(db_session: Session, status: str, vin: str, code: str) -> None:
     unit = _unit(db_session, vin)
+    rejected = status == "rejected"
     db_session.add(
         TransferOrder(
             unit=unit,
@@ -99,6 +100,8 @@ def existing_order(db_session: Session, status: str, vin: str, code: str) -> Non
             destination_dealer=_dealer(db_session, code),
             status=TransferOrderStatus(status),
             reason="Shortage",
+            decided_at=datetime(2026, 8, 1, tzinfo=UTC) if rejected else None,
+            rejection_reason="No" if rejected else None,
         )
     )
     db_session.flush()
