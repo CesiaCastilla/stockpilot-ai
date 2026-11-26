@@ -93,6 +93,7 @@ uv run python scripts/check_llm.py        # prueba el modelo de IA configurado (
 uv run pytest                             # tests (sin evals); los de integración necesitan Docker
 uv run pytest -m "not integration"        # solo unitarios, sin Docker
 uv run pytest --cov                       # con cobertura (mínimo 80%, como en CI)
+uv run pytest -m eval                     # evals del agente con el modelo real (no corren en CI); reporte en tests/evals/reports/
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src tests scripts
 ```

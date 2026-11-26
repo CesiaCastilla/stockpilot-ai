@@ -1,0 +1,326 @@
+# Agent regression scenarios. Run them with: uv run pytest -m eval
+#
+# Each one builds a small fictitious network and declares what the run must
+# achieve, never the exact text. On top of these expectations, every run is
+# checked for: invented VINs, validator rejections, wrong trim or destination,
+# more units than needed or than the yard can take, units taken from a dealer
+# that is short of them too, leaving older units behind, and false numbers in
+# the reasons. See checks.py.
+#
+# Thresholds: 60-day sales window, shortage below 15 days of coverage, aged
+# after 90 days. Sales are 10 days old unless days_ago says otherwise.
+# Trims: Aconcagua SR, Aconcagua SR 4x4, Tandil Start, Tandil Plus, Lanin Cargo.
+# Real Argentine cities, fictitious dealers.
+
+scenarios:
+  - id: sold_out_with_aged_units_elsewhere
+    title: Córdoba sold out of a trim that Mendoza has had for 130 days
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D002, trim: Aconcagua SR, days: 130, count: 2, label: aged}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 6}
+    expect:
+      outcome: [proposed]
+      orders: [1, 2]
+      destinations: [D001]
+      origins: [D002]
+      chosen: [aged]
+
+  - id: prefers_the_oldest_unit
+    title: Two candidates, one 210 days in stock and one 40; the young one is closer
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+      D004: {city: Villa María, at: [-32.41, -63.24]}
+    stock:
+      - {dealer: D003, trim: Tandil Start, days: 210, label: oldest}
+      - {dealer: D004, trim: Tandil Start, days: 40, label: young}
+    sales:
+      - {dealer: D001, trim: Tandil Start, count: 4}
+    expect:
+      orders: [1, 1]
+      chosen: [oldest]
+      not_chosen: [young]
+
+  - id: prefers_the_closest_among_similar
+    title: Two units with similar age, one 140 km away and one 750 km away
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D004: {city: Villa María, at: [-32.41, -63.24]}
+      D005: {city: Salta, at: [-24.79, -65.41]}
+    stock:
+      - {dealer: D004, trim: Tandil Plus, days: 150, label: near}
+      - {dealer: D005, trim: Tandil Plus, days: 160, label: far}
+    sales:
+      - {dealer: D001, trim: Tandil Plus, count: 4}
+    expect:
+      orders: [1, 1]
+      chosen: [near]
+      not_chosen: [far]
+
+  - id: assigns_from_the_distribution_center
+    title: No dealer has the trim; the distribution center has new units
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: CENTER, trim: Lanin Cargo, days: 12, count: 3, label: center}
+      - {dealer: D002, trim: Tandil Start, days: 150}
+    sales:
+      - {dealer: D001, trim: Lanin Cargo, count: 4}
+    expect:
+      outcome: [proposed]
+      orders: [1, 1]
+      origins: [CENTER]
+      chosen: [center]
+
+  - id: full_yard_gets_nothing
+    title: The dealer that sold out has no free place in its yard
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18], capacity: 3}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D001, trim: Tandil Start, days: 30, count: 3}
+      - {dealer: D002, trim: Aconcagua SR, days: 160, count: 2}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 6}
+    expect:
+      outcome: [no_proposal]
+      orders: [0, 0]
+
+  - id: shortage_covered_by_a_pending_order
+    title: A pending order already brings the one unit the dealer needs
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+    stock:
+      - {dealer: D002, trim: Aconcagua SR, days: 100, pending_to: D001}
+      - {dealer: D003, trim: Aconcagua SR, days: 120, label: spare}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 4}
+    expect:
+      outcome: [no_proposal]
+      orders: [0, 0]
+      not_chosen: [spare]
+
+  - id: only_unit_of_the_trim_is_reserved
+    title: The only unit of the trim in the network is reserved for a customer
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D002, trim: Aconcagua SR 4x4, days: 140, status: reserved, label: reserved}
+      - {dealer: D002, trim: Aconcagua SR, days: 140, count: 2}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR 4x4, count: 4}
+    expect:
+      outcome: [no_proposal]
+      orders: [0, 0]
+      not_chosen: [reserved]
+
+  - id: no_unit_of_the_trim_anywhere
+    title: A shortage with no unit of that trim anywhere, and many other aged units
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D002, trim: Tandil Start, days: 200, count: 3}
+      - {dealer: CENTER, trim: Aconcagua SR, days: 20, count: 3}
+    sales:
+      - {dealer: D001, trim: Lanin Cargo, count: 10}
+    expect:
+      outcome: [no_proposal]
+      orders: [0, 0]
+
+  - id: no_shortage_nothing_to_move
+    title: Every dealer is covered; some units are old but nobody needs them
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D001, trim: Aconcagua SR, days: 30, count: 5}
+      - {dealer: D002, trim: Tandil Start, days: 200, count: 4, label: old_without_demand}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 2}
+    expect:
+      outcome: [no_proposal]
+      orders: [0, 0]
+      not_chosen: [old_without_demand]
+
+  - id: sends_only_the_units_needed
+    title: The dealer needs one unit; another has five aged ones
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D002, trim: Tandil Start, days: 150, count: 5}
+    sales:
+      - {dealer: D001, trim: Tandil Start, count: 4}
+    expect:
+      orders: [1, 1]
+      destinations: [D001]
+
+  - id: sends_only_what_the_yard_takes
+    title: The dealer needs three units but has one free place
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18], capacity: 4}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D001, trim: Tandil Plus, days: 30, count: 3}
+      - {dealer: D002, trim: Aconcagua SR, days: 150, count: 4}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 12}
+    expect:
+      orders: [1, 1]
+      destinations: [D001]
+
+  - id: respects_max_proposals
+    title: Four dealers sold out of different trims; the run may propose two
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+      D004: {city: Villa María, at: [-32.41, -63.24]}
+      D006: {city: Neuquén, at: [-38.95, -68.06]}
+    stock:
+      - {dealer: D006, trim: Aconcagua SR, days: 150}
+      - {dealer: D006, trim: Tandil Start, days: 150}
+      - {dealer: D006, trim: Tandil Plus, days: 150}
+      - {dealer: D006, trim: Lanin Cargo, days: 150}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 4}
+      - {dealer: D002, trim: Tandil Start, count: 4}
+      - {dealer: D003, trim: Tandil Plus, count: 4}
+      - {dealer: D004, trim: Lanin Cargo, count: 4}
+    request: {max_proposals: 2}
+    expect:
+      outcome: [proposed]
+      orders: [1, 2]
+
+  - id: does_not_take_from_a_dealer_short_of_it
+    title: Rosario's old units are tempting, but Rosario is short of that trim too
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+    stock:
+      - {dealer: D003, trim: Aconcagua SR, days: 200, count: 2, label: rosario}
+      - {dealer: CENTER, trim: Aconcagua SR, days: 20, count: 3, label: center}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 6}
+      - {dealer: D003, trim: Aconcagua SR, count: 12}
+    expect:
+      outcome: [proposed]
+      orders: [1, 3]
+      origins: [CENTER]
+      not_chosen: [rosario]
+
+  - id: follows_the_trim_filter
+    title: Two shortages; the request asks only for one trim
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D004: {city: Villa María, at: [-32.41, -63.24]}
+    stock:
+      - {dealer: D002, trim: Tandil Start, days: 150, label: start_unit}
+      - {dealer: D002, trim: Lanin Cargo, days: 150, label: cargo_unit}
+    sales:
+      - {dealer: D001, trim: Tandil Start, count: 4}
+      - {dealer: D004, trim: Lanin Cargo, count: 4}
+    request: {trim: Tandil Start}
+    expect:
+      orders: [1, 1]
+      destinations: [D001]
+      chosen: [start_unit]
+      not_chosen: [cargo_unit]
+
+  - id: follows_the_model_filter
+    title: Two shortages of different models; the request asks only for one model
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+    stock:
+      - {dealer: D002, trim: Aconcagua SR, days: 150, label: sr_unit}
+      - {dealer: D002, trim: Tandil Plus, days: 150, label: plus_unit}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 4}
+      - {dealer: D003, trim: Tandil Plus, count: 4}
+    request: {model: Aconcagua}
+    expect:
+      orders: [1, 1]
+      destinations: [D001]
+      not_chosen: [plus_unit]
+
+  - id: does_not_send_another_trim_of_the_model
+    title: Short of the SR 4x4; plenty of old SR, and one new SR 4x4 at the center
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+    stock:
+      - {dealer: D002, trim: Aconcagua SR, days: 200, count: 3, label: other_trim}
+      - {dealer: CENTER, trim: Aconcagua SR 4x4, days: 15, label: right_trim}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR 4x4, count: 4}
+    expect:
+      orders: [1, 1]
+      chosen: [right_trim]
+      not_chosen: [other_trim]
+
+  - id: most_urgent_shortage_first
+    title: One proposal allowed; Córdoba sold out and sells more than Rosario
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+    stock:
+      - {dealer: D003, trim: Tandil Start, days: 20}
+      - {dealer: D002, trim: Aconcagua SR, days: 150, label: sr_unit}
+      - {dealer: D002, trim: Tandil Start, days: 150, label: start_unit}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 12}
+      - {dealer: D003, trim: Tandil Start, count: 6}
+    request: {max_proposals: 1}
+    expect:
+      orders: [1, 1]
+      destinations: [D001]
+      chosen: [sr_unit]
+
+  - id: skips_a_unit_already_proposed
+    title: The oldest unit already has a pending order to another dealer
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D003: {city: Rosario, at: [-32.95, -60.65]}
+      D004: {city: Villa María, at: [-32.41, -63.24]}
+    stock:
+      - {dealer: D002, trim: Tandil Start, days: 250, pending_to: D003, label: taken}
+      - {dealer: D004, trim: Tandil Start, days: 120, label: free}
+    sales:
+      - {dealer: D001, trim: Tandil Start, count: 4}
+      - {dealer: D003, trim: Tandil Start, count: 4}
+    expect:
+      orders: [1, 1]
+      destinations: [D001]
+      chosen: [free]
+      not_chosen: [taken]
+
+  - id: replaces_a_rejected_transfer
+    title: People reject the proposal for a damaged unit; another one exists
+    dealers:
+      D001: {city: Córdoba, at: [-31.42, -64.18]}
+      D002: {city: Mendoza, at: [-32.89, -68.84]}
+      D004: {city: Villa María, at: [-32.41, -63.24]}
+    stock:
+      - {dealer: D002, trim: Aconcagua SR, days: 200, label: first}
+      - {dealer: D004, trim: Aconcagua SR, days: 180, label: second}
+    sales:
+      - {dealer: D001, trim: Aconcagua SR, count: 4}
+    reject_with: La unidad tiene un daño en la carrocería y no puede viajar.
+    expect:
+      orders: [2, 2]
+      chosen: [first, second]
+      replacement: true

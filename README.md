@@ -32,6 +32,18 @@ Start a run with `POST /api/v1/agent/runs` and follow it with `GET /api/v1/agent
 
 To run without a key, use a local model with [Ollama](https://ollama.com) that supports tool calling: set `LLM_PROVIDER=ollama` and `LLM_MODEL` (for example `qwen3:8b`). Tests never call a real model.
 
+## Agent evals
+
+`tests/evals/scenarios.yaml` holds 19 business scenarios: a dealer sold out with aged units elsewhere, a full yard, the only unit reserved, a shortage with no unit anywhere, a rejected transfer that needs a replacement, and more. Each one declares what the run must achieve, not the exact text, and every run is also checked for invented VINs, wrong trims or destinations, more units than needed, older units left behind and false numbers in the reasons.
+
+```bash
+uv run pytest -m eval              # all scenarios with the real model (about 4 minutes)
+uv run pytest -m eval -k oldest    # some of them
+EVAL_PAUSE_SECONDS=5 uv run pytest -m eval   # slower, for a low per-minute quota
+```
+
+They use the real model, so they never run in CI or with a plain `uv run pytest`. Each run writes a report to `tests/evals/reports/`, with the prompt version, to compare prompts and models. The scenarios and checks are tested themselves in CI, against a hand-written reference plan and deliberately wrong ones.
+
 ## Development
 
 ```bash

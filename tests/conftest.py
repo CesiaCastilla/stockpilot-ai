@@ -15,7 +15,14 @@ _LLM_VARIABLES = [
 
 
 @pytest.fixture(autouse=True)
-def _no_real_ai_model(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def _no_real_ai_model(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    # The evals are the only tests meant to use the real model. They never run
+    # by accident: pytest's addopts exclude them unless `-m eval` is given.
+    if request.node.get_closest_marker("eval") is not None:
+        yield
+        return
     for name in _LLM_VARIABLES:
         monkeypatch.delenv(name)
     # Environment variables win over the .env file, which may hold a real key:
