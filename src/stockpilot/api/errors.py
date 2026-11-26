@@ -7,6 +7,7 @@ them. This keeps both layers free of status-code logic.
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from stockpilot.agents.llm import LlmNotConfiguredError
 from stockpilot.domain.errors import (
     AlreadyExistsError,
     ConflictError,
@@ -46,5 +47,13 @@ async def _handle_domain_error(request: Request, error: Exception) -> JSONRespon
     return JSONResponse(status_code=status_for(error), content={"detail": str(error)})
 
 
+async def _handle_llm_not_configured(request: Request, error: Exception) -> JSONResponse:
+    # 503: the API works, but this feature needs a setting the server does not have.
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(error)}
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, _handle_domain_error)
+    app.add_exception_handler(LlmNotConfiguredError, _handle_llm_not_configured)

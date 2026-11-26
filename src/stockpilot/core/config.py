@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: PositiveFloat = 60
     # Retries of the call itself (network, rate limits), not of a rejected proposal.
     llm_max_retries: NonNegativeInt = 2
+    # Model calls per agent run: caps its cost and the free tier quota it uses.
+    agent_max_model_calls: int = Field(default=10, ge=2, le=50)
 
     # Built here once, so the API, the agent and the jobs all use the same thresholds.
     def coverage_policy(self) -> CoveragePolicy:

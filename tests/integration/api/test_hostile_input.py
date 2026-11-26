@@ -16,10 +16,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from stockpilot.core.config import Settings
+from stockpilot.domain.agent_runs import AgentRunStatus, AgentRunTrigger
 from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.main import create_app
-from stockpilot.models import Dealer, TransferOrder, Trim, Unit, VehicleModel
+from stockpilot.models import AgentRun, Dealer, TransferOrder, Trim, Unit, VehicleModel
 
 pytestmark = pytest.mark.integration
 
@@ -41,6 +42,7 @@ VALID: dict[str, Any] = {
     "yard_capacity": 5,
     "list_price_usd": "100.00",
     "reason": "Shortage",
+    "max_proposals": 2,
 }
 
 
@@ -126,7 +128,16 @@ def ids(db_session: Session) -> dict[str, int | str]:
         status=TransferOrderStatus.PENDING,
         reason="Shortage",
     )
-    db_session.add(order)
+    run = AgentRun(
+        status=AgentRunStatus.RUNNING,
+        trigger=AgentRunTrigger.API,
+        request={},
+        llm_provider="fake",
+        llm_model="fake",
+        tool_calls=[],
+        submissions=[],
+    )
+    db_session.add_all([order, run])
     db_session.commit()
     return {
         "dealer_id": dealer.id,
@@ -135,6 +146,7 @@ def ids(db_session: Session) -> dict[str, int | str]:
         "model_id": trim.vehicle_model_id,
         "unit_id": unit.id,
         "order_id": order.id,
+        "run_id": run.id,
         "vin": VIN,
     }
 
@@ -167,7 +179,7 @@ def test_baseline_request_is_well_formed(
     # Without this, a 422 below could come from anything else in the request.
     status, text = _send(api_client, operation, ids)
 
-    assert status in {200, 201, 204, 409}, text
+    assert status in {200, 201, 202, 204, 409}, text
 
 
 @pytest.mark.parametrize("case", CASES, ids=str)

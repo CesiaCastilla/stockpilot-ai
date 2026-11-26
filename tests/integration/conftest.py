@@ -1,6 +1,7 @@
 """Shared fixtures for integration tests: one PostgreSQL container per test session."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,9 +12,12 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
+from stockpilot.api.dependencies import get_agent_run_service, get_chat_model
 from stockpilot.core.config import Settings
 from stockpilot.core.database import get_session
 from stockpilot.main import create_app
+from stockpilot.services.agent_runs import AgentRunService
+from tests.fakes import says, scripted
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,12 +66,33 @@ def db_session(migrated_engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def api_client(postgres_url: str, db_session: Session) -> Iterator[TestClient]:
+def session_factory(db_session: Session) -> Callable[[], Session]:
+    """New sessions inside the test's transaction, for code that opens its own
+    (the agent and its tools). They see the test's data and are rolled back with it."""
+    connection = db_session.connection()
+
+    def new_session() -> Session:
+        return Session(
+            bind=connection, join_transaction_mode="create_savepoint", expire_on_commit=False
+        )
+
+    return new_session
+
+
+@pytest.fixture
+def api_client(
+    postgres_url: str, db_session: Session, session_factory: Callable[[], Session]
+) -> Iterator[TestClient]:
     """HTTP client whose requests share db_session, so their writes are rolled back too.
 
-    Tests can also arrange data through db_session and the API will see it.
+    Tests can also arrange data through db_session and the API will see it. An
+    agent run started here uses a fake model that finds nothing to move.
     """
     app = create_app(Settings(database_url=postgres_url))
     app.dependency_overrides[get_session] = lambda: db_session
+    app.dependency_overrides[get_chat_model] = lambda: scripted(says("Nothing to move."))
+    app.dependency_overrides[get_agent_run_service] = lambda: AgentRunService(
+        session_factory, [], clock=lambda: datetime.now(UTC), max_model_calls=10
+    )
     with TestClient(app) as client:
         yield client
