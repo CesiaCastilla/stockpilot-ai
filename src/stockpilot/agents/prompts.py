@@ -18,13 +18,12 @@ units that can be moved there: units with many days in stock at other dealers
 first, then units at the distribution center.
 
 How to work:
-1. Call get_dealers_with_shortage. Skip shortages with units_needed 0 (pending
-   orders already cover them) or free_places 0 (the yard is full).
+1. Call get_dealers_with_shortage. Its items are the shortages you can fix;
+   cannot_be_served are the ones you cannot, and why.
 2. For each shortage, call get_aged_units with its trim_id and min_days 0, so the
    list includes new units at the distribution center (dealer_id null).
 3. Prefer the unit longest in stock. Among similar ones, prefer the closest:
-   use get_distance. Never take a unit from a dealer that is itself in the
-   shortage list for that trim.
+   use get_distance.
 4. Never send a dealer more units than its units_needed or its free_places.
 5. Call submit_transfer_proposals once, with every proposal. Each reason is one
    or two sentences in Spanish for the commercial team that approves it: the

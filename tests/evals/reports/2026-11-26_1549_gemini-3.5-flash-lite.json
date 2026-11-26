@@ -1,0 +1,1476 @@
+{
+  "provider": "google_genai",
+  "model": "gemini-3.5-flash-lite",
+  "prompt_version": "99441f40e2",
+  "started_at": "2026-11-26T15:49:44.490851+00:00",
+  "scenarios": "19 of 19",
+  "passed": 19,
+  "errors": 0,
+  "input_tokens": 114941,
+  "output_tokens": 3619,
+  "results": [
+    {
+      "id": "sold_out_with_aged_units_elsewhere",
+      "title": "Córdoba sold out of a trim that Mendoza has had for 130 days",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "6 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "2 orders, expected 1 to 2"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "proposed"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_origins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 (aged) D002 -> D001, pending: El concesionario tiene 0 días de cobertura con 6 ventas recientes y necesita unidades de este versión. La unidad seleccionada lleva 130 días en stock en el origen y la distancia es de 468 km.",
+        "8AFZZZ00000000002 (aged) D002 -> D001, pending: El concesionario tiene 0 días de cobertura con 6 ventas recientes y necesita unidades de este versión. La unidad seleccionada lleva 130 días en stock en el origen y la distancia es de 468 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6670,
+      "output_tokens": 255,
+      "seconds": 14.1,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "prefers_the_oldest_unit",
+      "title": "Two candidates, one 210 days in stock and one 40; the young one is closer",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 (oldest) D003 -> D001, pending: El concesionario D001 tiene 0 días de cobertura y 4 ventas recientes en Start, necesitando unidades con urgencia. Se traslada una unidad con 210 días en stock desde el concesionario D003 a una distancia de 373.2 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6725,
+      "output_tokens": 219,
+      "seconds": 13.5,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "prefers_the_closest_among_similar",
+      "title": "Two units with similar age, one 140 km away and one 750 km away",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 (near) D004 -> D001, pending: El concesionario D001 tiene 0 días de cobertura y 4 ventas recientes en Tandil Plus, necesitando unidades con urgencia. La unidad propuesta en D004 lleva 150 días en stock y se encuentra a una distancia de 141.4 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6728,
+      "output_tokens": 216,
+      "seconds": 10.4,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "assigns_from_the_distribution_center",
+      "title": "No dealer has the trim; the distribution center has new units",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "2 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "proposed"
+        },
+        {
+          "name": "expected_origins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 (center) CENTER -> D001, pending: El concesionario D001 tiene 0 días de cobertura y 4 ventas recientes en el modelo Lanin Cargo. Se propone trasladar esta unidad desde el centro de distribución a 334 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6815,
+      "output_tokens": 173,
+      "seconds": 9.5,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "full_yard_gets_nothing",
+      "title": "The dealer that sold out has no free place in its yard",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": null,
+          "detail": "no number to verify"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "0 orders, expected 0 to 0"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "no_proposal"
+        }
+      ],
+      "orders": [],
+      "model_calls": 2,
+      "input_tokens": 2834,
+      "output_tokens": 76,
+      "seconds": 8.1,
+      "stop_reason": "answered",
+      "summary": "No hay faltantes que se puedan resolver en este momento, ya que los concesionarios con escasez o bien tienen sus playas llenas (como D001 para la versión SR) o no hay unidades disponibles para transferir que cumplan con las condiciones necesarias.",
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "shortage_covered_by_a_pending_order",
+      "title": "A pending order already brings the one unit the dealer needs",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": null,
+          "detail": "no number to verify"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "0 orders, expected 0 to 0"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "no_proposal"
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [],
+      "model_calls": 2,
+      "input_tokens": 2834,
+      "output_tokens": 61,
+      "seconds": 11.8,
+      "stop_reason": "answered",
+      "summary": "No hay escasez de stock que requiera traslados urgentes en este momento; todos los concesionarios cuentan con cobertura suficiente o con órdenes de transferencia pendientes que cubren sus necesidades actuales.",
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "only_unit_of_the_trim_is_reserved",
+      "title": "The only unit of the trim in the network is reserved for a customer",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": null,
+          "detail": "no number to verify"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "0 orders, expected 0 to 0"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "no_proposal"
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [],
+      "model_calls": 3,
+      "input_tokens": 4535,
+      "output_tokens": 114,
+      "seconds": 6.6,
+      "stop_reason": "answered",
+      "summary": "No se encontraron unidades disponibles (ni en concesionarios ni en el centro de distribución) para cubrir el faltante del modelo Aconcagua (trim SR 4x4) en el concesionario D001. Por lo tanto, no se propuso ninguna transferencia.",
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "no_unit_of_the_trim_anywhere",
+      "title": "A shortage with no unit of that trim anywhere, and many other aged units",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": null,
+          "detail": "no number to verify"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "0 orders, expected 0 to 0"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "no_proposal"
+        }
+      ],
+      "orders": [],
+      "model_calls": 3,
+      "input_tokens": 4527,
+      "output_tokens": 89,
+      "seconds": 5.2,
+      "stop_reason": "answered",
+      "summary": "No se encontraron unidades disponibles para transferir del modelo Lanin (trim Cargo) que puedan cubrir la escasez del concesionario D001.",
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "no_shortage_nothing_to_move",
+      "title": "Every dealer is covered; some units are old but nobody needs them",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": null,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": null,
+          "detail": "no number to verify"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "0 orders, expected 0 to 0"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "no_proposal"
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [],
+      "model_calls": 2,
+      "input_tokens": 2799,
+      "output_tokens": 45,
+      "seconds": 9.9,
+      "stop_reason": "answered",
+      "summary": "No hay concesionarios con escasez en este momento que cumplan con los criterios para recibir transferencias de stock.",
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "sends_only_the_units_needed",
+      "title": "The dealer needs one unit; another has five aged ones",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 D002 -> D001, pending: El concesionario D001 tiene 0 días de cobertura con 4 ventas recientes y necesita unidades. La unidad seleccionada tiene 150 días en stock en D002 y la distancia es de 468.1 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 7451,
+      "output_tokens": 185,
+      "seconds": 11.4,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "sends_only_what_the_yard_takes",
+      "title": "The dealer needs three units but has one free place",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000004 D002 -> D001, pending: El concesionario D001 tiene 0 días de cobertura y 12 ventas recientes, requiriendo unidades urgentemente. Se propone trasladar esta unidad con 150 días en stock desde el concesionario D002 a una distancia de 468.1 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 7209,
+      "output_tokens": 198,
+      "seconds": 22.6,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "respects_max_proposals",
+      "title": "Four dealers sold out of different trims; the run may propose two",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "6 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "2 orders, expected 1 to 2"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "proposed"
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 D006 -> D001, pending: El concesionario D001 tiene una cobertura de 0 días y ventas recientes de 4 unidades. Se propone trasladar la unidad con 150 días en stock desde el concesionario D006, ubicado a una distancia de 908.3 km.",
+        "8AFZZZ00000000002 D006 -> D002, pending: El concesionario D002 tiene una cobertura de 0 días y ventas recientes de 4 unidades. Se propone trasladar la unidad con 150 días en stock desde el concesionario D006, ubicado a una distancia de 677.5 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 7173,
+      "output_tokens": 327,
+      "seconds": 12.2,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "does_not_take_from_a_dealer_short_of_it",
+      "title": "Rosario's old units are tempting, but Rosario is short of that trim too",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "9 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "3 orders, expected 1 to 3"
+        },
+        {
+          "name": "expected_outcome",
+          "passed": true,
+          "detail": "proposed"
+        },
+        {
+          "name": "expected_origins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000003 (center) CENTER -> D001, pending: El concesionario D001 tiene 0 días de cobertura con 6 ventas recientes y necesita 2 unidades. Se propone transferir esta unidad con 20 días en stock desde el centro de distribución a una distancia de 334.3 km.",
+        "8AFZZZ00000000004 (center) CENTER -> D001, pending: El concesionario D001 tiene 0 días de cobertura con 6 ventas recientes y necesita 2 unidades. Se propone transferir esta segunda unidad con 20 días en stock desde el centro de distribución a una distancia de 334.3 km.",
+        "8AFZZZ00000000005 (center) CENTER -> D003, pending: El concesionario D003 tiene 10 días de cobertura con 12 ventas recientes y necesita 1 unidad. Se propone transferir esta unidad con 20 días en stock desde el centro de distribución a una distancia de 93.6 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 7152,
+      "output_tokens": 382,
+      "seconds": 16.1,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "follows_the_trim_filter",
+      "title": "Two shortages; the request asks only for one trim",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 (start_unit) D002 -> D001, pending: El concesionario tiene 0 días de cobertura y 4 ventas recientes. La unidad lleva 150 días en stock y la distancia es de 468 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6524,
+      "output_tokens": 189,
+      "seconds": 9.3,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "follows_the_model_filter",
+      "title": "Two shortages of different models; the request asks only for one model",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000001 (sr_unit) D002 -> D001, pending: El concesionario tiene una cobertura de 0 días y ventas recientes de 4 unidades, necesitando cubrir la falta de stock del modelo. La unidad elegida lleva 150 días en stock en el concesionario de origen y la distancia entre ambos es de 468.1 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6510,
+      "output_tokens": 200,
+      "seconds": 16.5,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "does_not_send_another_trim_of_the_model",
+      "title": "Short of the SR 4x4; plenty of old SR, and one new SR 4x4 at the center",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "2 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000004 (right_trim) CENTER -> D001, pending: El concesionario se encuentra sin stock (0 días de cobertura) con ventas recientes estables. Se propone trasladar una unidad con 15 días en stock desde el centro de distribución ubicado a una distancia de 334.3 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6434,
+      "output_tokens": 186,
+      "seconds": 12.5,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "most_urgent_shortage_first",
+      "title": "One proposal allowed; Córdoba sold out and sells more than Rosario",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000002 (sr_unit) D002 -> D001, pending: El concesionario D001 tiene 0 días de cobertura con 12 ventas recientes y necesita unidades de este ajuste. La unidad seleccionada lleva 150 días en stock en el concesionario de origen, ubicado a 468.1 km de distancia."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6438,
+      "output_tokens": 195,
+      "seconds": 8.1,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "skips_a_unit_already_proposed",
+      "title": "The oldest unit already has a pending order to another dealer",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "3 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "1 orders, expected 1 to 1"
+        },
+        {
+          "name": "expected_destinations",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "avoided_units",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000002 (free) D004 -> D001, pending: El concesionario D001 tiene 0 días de cobertura con 4 ventas recientes y necesita 1 unidad. Se propone trasladar desde D004 una unidad con 120 días en stock, ubicada a 141.4 km."
+      ],
+      "model_calls": 4,
+      "input_tokens": 6558,
+      "output_tokens": 187,
+      "seconds": 7.5,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    },
+    {
+      "id": "replaces_a_rejected_transfer",
+      "title": "People reject the proposal for a damaged unit; another one exists",
+      "checks": [
+        {
+          "name": "run_finished",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_invented_vins",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_validator_rejections",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "right_trim_and_destination",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_units_needed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "within_free_places",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "origin_not_short",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "oldest_first",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "reason_facts",
+          "passed": true,
+          "detail": "6 numbers verified"
+        },
+        {
+          "name": "expected_order_count",
+          "passed": true,
+          "detail": "2 orders, expected 2 to 2"
+        },
+        {
+          "name": "chose_expected_units",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "proposed_a_replacement",
+          "passed": true,
+          "detail": "1 replacement orders"
+        }
+      ],
+      "orders": [
+        "8AFZZZ00000000002 (second) D004 -> D001, rejected: El concesionario D001 tiene 0 días de cobertura y 4 ventas recientes. Se propone trasladar la unidad con 180 días en stock desde el concesionario D004, ubicado a 141.4 km.",
+        "8AFZZZ00000000001 (first) D002 -> D001, pending: El concesionario D001 tiene 0 días de cobertura y 4 ventas recientes. Se propone trasladar la unidad alternativa con 200 días en stock desde el concesionario D002, ubicado a 468.1 km, ya que la unidad anterior presentaba daños en la carrocería."
+      ],
+      "model_calls": 5,
+      "input_tokens": 9025,
+      "output_tokens": 322,
+      "seconds": 48.1,
+      "stop_reason": "submitted",
+      "summary": null,
+      "passed": true,
+      "error": false
+    }
+  ]
+}

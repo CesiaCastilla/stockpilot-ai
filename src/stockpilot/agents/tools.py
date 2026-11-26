@@ -126,17 +126,36 @@ def build_tools(ctx: ToolContext) -> list[BaseTool]:
         filters = NetworkFilters(vehicle_model_id=args.vehicle_model_id, trim_id=args.trim_id)
         with ctx.session_factory() as session:
             report = CoverageService(session, ctx.policy).shortages(filters, now=ctx.clock())
+        # Decided here, not left to the model: the evals showed it sometimes
+        # proposed transfers to a full yard. These go apart, with the reason.
+        actionable = [s for s in report.items if s.units_needed and s.free_places]
+        cannot_be_served = [
+            {
+                "dealer_code": s.dealer_code,
+                "trim_id": s.trim_id,
+                "trim_name": s.trim_name,
+                "why": "the yard is full" if not s.free_places else "pending orders cover it",
+            }
+            for s in report.items
+            if not (s.units_needed and s.free_places)
+        ]
         return {
             **report.model_dump(exclude={"items"}),
-            "total": len(report.items),
-            "items": report.items[: args.limit],
+            "total": len(actionable),
+            "items": actionable[: args.limit],
+            "cannot_be_served": cannot_be_served,
         }
 
     def get_aged_units(args: AgedUnitsArgs) -> Any:
         filters = NetworkFilters(vehicle_model_id=args.vehicle_model_id, trim_id=args.trim_id)
         with ctx.session_factory() as session:
             page = CoverageService(session, ctx.policy).aged_units(
-                filters, now=ctx.clock(), min_days=args.min_days, limit=args.limit
+                filters,
+                now=ctx.clock(),
+                min_days=args.min_days,
+                limit=args.limit,
+                # Same reason: the evals showed it took units from a dealer short of them.
+                skip_short_dealers=True,
             )
         # No offset: the model asks for a narrower list instead of paging.
         return page.model_dump(exclude={"limit", "offset"})
@@ -166,16 +185,17 @@ def build_tools(ctx: ToolContext) -> list[BaseTool]:
         _tool(
             get_dealers_with_shortage,
             ShortageArgs,
-            "Dealers and trims that will run out soon, lowest coverage first. "
-            "units_needed is how many more units each one needs, already counting "
-            "pending transfer orders; free_places is how many its yard can still take.",
+            "Shortages that transfers can fix, lowest coverage first. units_needed is "
+            "how many more units each one needs, already counting pending transfer "
+            "orders; free_places is how many its yard can still take. cannot_be_served "
+            "lists the other shortages and why: there is nothing to propose for them.",
         ),
         _tool(
             get_aged_units,
             AgedUnitsArgs,
             "Units that can be transferred today (in a yard, not reserved, without a "
-            "pending order), longest in stock first. dealer_id null means the "
-            "distribution center.",
+            "pending order, not at a dealer short of their trim), longest in stock "
+            "first. dealer_id null means the distribution center.",
         ),
         _tool(
             decode_vin,

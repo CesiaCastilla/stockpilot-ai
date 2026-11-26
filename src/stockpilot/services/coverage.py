@@ -95,25 +95,31 @@ class CoverageService:
         min_days: int | None = None,
         limit: int = 50,
         offset: int = 0,
+        skip_short_dealers: bool = False,
     ) -> AgedUnitPage:
         """Units in a yard for more than min_days (the aging threshold by default)
         that could be moved: not reserved, not in transit, without a pending order.
 
         min_days=0 lists every movable unit, the distribution center included.
+        skip_short_dealers leaves out units at a dealer that is short of their
+        trim: moving them would only move the shortage.
         """
         days = self.policy.aged_after_days if min_days is None else min_days
         received_before = now - timedelta(days=days)
+        excluded = self._short_pairs(now) if skip_short_dealers else set()
         rows = self.coverage.aged_units(
             received_before=received_before,
             trim_id=filters.trim_id,
             vehicle_model_id=filters.vehicle_model_id,
             limit=limit,
             offset=offset,
+            excluded=excluded,
         )
         total = self.coverage.count_aged_units(
             received_before=received_before,
             trim_id=filters.trim_id,
             vehicle_model_id=filters.vehicle_model_id,
+            excluded=excluded,
         )
         return AgedUnitPage(
             items=[_aged_unit(row, now) for row in rows],
@@ -123,6 +129,10 @@ class CoverageService:
             as_of=now,
             min_days=days,
         )
+
+    def _short_pairs(self, now: datetime) -> set[tuple[int, int]]:
+        rows = self.coverage.network_by_trim(sales_since=self.policy.sales_since(now), now=now)
+        return {(r.dealer_id, r.trim_id) for r in rows if self._shortage(r) is not None}
 
     def _shortage(self, row: DealerTrimRow) -> Shortage | None:
         available = row.in_yard + row.in_transit

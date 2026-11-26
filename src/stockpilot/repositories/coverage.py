@@ -1,9 +1,9 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ColumnElement, and_, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from stockpilot.domain.transfers import TransferOrderStatus
@@ -241,6 +241,7 @@ class CoverageRepository:
         vehicle_model_id: int | None,
         limit: int,
         offset: int,
+        excluded: Collection[tuple[int, int]] = (),
     ) -> Sequence[AgedUnitRow]:
         """Units that could be moved today, oldest first, at a dealer or at the center."""
         query = (
@@ -261,7 +262,7 @@ class CoverageRepository:
             .join(VehicleModel, VehicleModel.id == Trim.vehicle_model_id)
             # Outer: a unit at the distribution center has no dealer.
             .outerjoin(Dealer, Dealer.id == Unit.dealer_id)
-            .where(*_aged(received_before, trim_id, vehicle_model_id))
+            .where(*_aged(received_before, trim_id, vehicle_model_id, excluded))
             .order_by(Unit.received_at, Unit.id)
             .limit(limit)
             .offset(offset)
@@ -269,13 +270,18 @@ class CoverageRepository:
         return [AgedUnitRow(**row._mapping) for row in self.session.execute(query)]
 
     def count_aged_units(
-        self, *, received_before: datetime, trim_id: int | None, vehicle_model_id: int | None
+        self,
+        *,
+        received_before: datetime,
+        trim_id: int | None,
+        vehicle_model_id: int | None,
+        excluded: Collection[tuple[int, int]] = (),
     ) -> int:
         query = (
             select(func.count())
             .select_from(Unit)
             .join(Trim, Trim.id == Unit.trim_id)
-            .where(*_aged(received_before, trim_id, vehicle_model_id))
+            .where(*_aged(received_before, trim_id, vehicle_model_id, excluded))
         )
         return self.session.scalar(query) or 0
 
@@ -293,7 +299,10 @@ def _catalog_filters(
 
 
 def _aged(
-    received_before: datetime, trim_id: int | None, vehicle_model_id: int | None
+    received_before: datetime,
+    trim_id: int | None,
+    vehicle_model_id: int | None,
+    excluded: Collection[tuple[int, int]] = (),
 ) -> list[ColumnElement[bool]]:
     """The same WHERE for the page and its count."""
     has_pending_order = exists().where(
@@ -306,4 +315,16 @@ def _aged(
         # Already proposed: the validator would reject it again.
         ~has_pending_order,
         *_catalog_filters(trim_id, vehicle_model_id),
+        # Units of these (dealer, trim) pairs are left out. The distribution center
+        # must be kept explicitly: (NULL, trim) NOT IN (...) is NULL, not true.
+        *(
+            [
+                or_(
+                    Unit.dealer_id.is_(None),
+                    tuple_(Unit.dealer_id, Unit.trim_id).not_in(list(excluded)),
+                )
+            ]
+            if excluded
+            else []
+        ),
     ]

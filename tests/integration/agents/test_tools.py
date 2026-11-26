@@ -17,10 +17,11 @@ from stockpilot.core.config import Settings
 from stockpilot.domain.delivery import Holiday
 from stockpilot.domain.errors import ExternalServiceError
 from stockpilot.domain.exchange_rate import ExchangeRate
+from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.domain.unit_status import UnitStatus
 from stockpilot.domain.vin import model_year
 from stockpilot.domain.vin_info import VehicleInfo
-from stockpilot.models import Dealer, Sale, Trim, Unit, VehicleModel
+from stockpilot.models import Dealer, Sale, TransferOrder, Trim, Unit, VehicleModel
 from stockpilot.schemas.coverage import NetworkFilters
 from stockpilot.services.coverage import CoverageService
 
@@ -165,7 +166,63 @@ def test_shortages_are_those_of_the_service(
 
     answer = _call(tools, "get_dealers_with_shortage")
 
-    assert answer == {**expected.model_dump(mode="json"), "total": 3}
+    assert answer == {**expected.model_dump(mode="json"), "total": 3, "cannot_be_served": []}
+
+
+def test_shortages_that_cannot_be_served_go_apart_with_the_reason(
+    tools: dict[str, BaseTool], world: World, db_session: Session
+) -> None:
+    world.sale(world.north)
+    world.sale(world.south)
+    world.sale(world.unlocated)
+    # North's yard is full; a pending order already covers south.
+    world.north.yard_capacity = 1
+    world.unit(world.north, 5, UnitStatus.RESERVED)
+    db_session.add(
+        TransferOrder(
+            unit=world.unit(None, 5),
+            destination_dealer=world.south,
+            status=TransferOrderStatus.PENDING,
+            reason="x",
+        )
+    )
+    db_session.flush()
+
+    answer = _call(tools, "get_dealers_with_shortage")
+
+    assert [s["dealer_code"] for s in answer["items"]] == ["D003"]
+    assert answer["total"] == 1
+    assert [(s["dealer_code"], s["why"]) for s in answer["cannot_be_served"]] == [
+        ("D001", "the yard is full"),
+        ("D002", "pending orders cover it"),
+    ]
+
+
+def test_aged_units_leave_out_dealers_short_of_the_trim(
+    tools: dict[str, BaseTool], world: World
+) -> None:
+    for _ in range(5):
+        world.sale(world.north)
+    world.unit(world.north, 200)  # 1 unit for 5 sales in 60 days: 12 days, short
+    south = world.unit(world.south, 150)
+    center = world.unit(None, 10)
+
+    answer = _call(tools, "get_aged_units", min_days=0)
+
+    # The distribution center has no shortage, so its units always stay.
+    assert [u["vin"] for u in answer["items"]] == [south.vin, center.vin]
+    assert answer["total"] == 2
+
+
+def test_aged_units_keep_dealers_that_sell_but_are_covered(
+    tools: dict[str, BaseTool], world: World
+) -> None:
+    world.sale(world.south)
+    covered = world.unit(world.south, 150)  # 1 unit for 1 sale: 60 days, not short
+
+    answer = _call(tools, "get_aged_units", min_days=0)
+
+    assert [u["vin"] for u in answer["items"]] == [covered.vin]
 
 
 def test_shortages_are_cut_to_the_limit_but_the_total_counts_all(
