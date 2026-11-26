@@ -45,6 +45,16 @@ class TransferOrderRepository:
         self.session.add(order)
         return order
 
+    def for_run(self, agent_run_id: int) -> Sequence[TransferOrder]:
+        """Every order an agent run created, oldest first, with its unit."""
+        query = (
+            select(TransferOrder)
+            .where(TransferOrder.agent_run_id == agent_run_id)
+            .order_by(TransferOrder.id)
+            .options(joinedload(TransferOrder.unit))
+        )
+        return self.session.scalars(query).all()
+
     def has_pending(self, unit_id: int) -> bool:
         pending = select(TransferOrder.id).where(
             TransferOrder.unit_id == unit_id, TransferOrder.status == TransferOrderStatus.PENDING

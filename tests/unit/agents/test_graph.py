@@ -1,13 +1,18 @@
 """The graph with a scripted model, fake tools and a fake validator: no database, no network."""
 
 import json
-from typing import Any
+from itertools import count
+from typing import Any, cast
 
 import pytest
-from langchain_core.messages import SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, StructuredTool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
 from stockpilot.agents.graph import (
+    MAX_REPLACEMENT_ROUNDS,
     MAX_RETRIES,
     SUBMIT,
     AgentLimits,
@@ -38,6 +43,7 @@ class FakeValidator:
 
     def __init__(self) -> None:
         self.orders: list[TransferProposal] = []
+        self.ids = count(101)
 
     def __call__(self, proposal: TransferProposal) -> int:
         if proposal.vin not in {GOOD, ALSO_GOOD} or proposal in self.orders:
@@ -45,7 +51,7 @@ class FakeValidator:
                 [Violation(TransferRule.UNIT_EXISTS, f"Unit {proposal.vin} does not exist")]
             )
         self.orders.append(proposal)
-        return 100 + len(self.orders)
+        return next(self.ids)
 
 
 def _tools() -> list[BaseTool]:
@@ -71,20 +77,71 @@ def _tools() -> list[BaseTool]:
     ]
 
 
+class Run:
+    """One graph run, kept by an in-memory checkpointer between pauses."""
+
+    def __init__(
+        self,
+        model: ScriptedChatModel,
+        validator: FakeValidator | None = None,
+        limits: AgentLimits = LIMITS,
+        checkpointer: InMemorySaver | None = None,
+    ) -> None:
+        self.model_requests = 0
+
+        def model_factory() -> ScriptedChatModel:
+            self.model_requests += 1
+            return model
+
+        self.checkpointer = checkpointer or InMemorySaver()
+        self.graph = build_graph(
+            model_factory,
+            _tools(),
+            validator or FakeValidator(),
+            system_prompt="You allocate units.",
+            limits=limits,
+            checkpointer=self.checkpointer,
+        )
+        self.config: RunnableConfig = {"configurable": {"thread_id": "run-1"}}
+
+    def start(self) -> AgentState:
+        self.graph.invoke(initial_state("Propose at most 5 transfers."), self.config)
+        return self.state
+
+    def decide(self, *decisions: dict[str, Any]) -> AgentState:
+        self.graph.invoke(Command(resume=list(decisions)), self.config)
+        return self.state
+
+    @property
+    def state(self) -> AgentState:
+        return cast(AgentState, self.graph.get_state(self.config).values)
+
+    @property
+    def waiting_for(self) -> list[int] | None:
+        """The orders it waits for, or None if it is not paused."""
+        snapshot = self.graph.get_state(self.config)
+        if not snapshot.next:
+            return None
+        value: dict[str, list[int]] = snapshot.interrupts[0].value
+        return value["order_ids"]
+
+
 def _run(
     model: ScriptedChatModel,
     validator: FakeValidator | None = None,
     limits: AgentLimits = LIMITS,
 ) -> AgentState:
-    graph = build_graph(
-        model,
-        _tools(),
-        validator or FakeValidator(),
-        system_prompt="You allocate units.",
-        limits=limits,
-    )
-    state = graph.invoke(initial_state("Propose at most 5 transfers."))
-    return state  # type: ignore[return-value]
+    return Run(model, validator, limits).start()
+
+
+def _decision(order_id: int, vin: str, reason: str | None = None) -> dict[str, Any]:
+    return {
+        "order_id": order_id,
+        "vin": vin,
+        "destination_dealer_id": 7,
+        "status": "approved" if reason is None else "rejected",
+        "rejection_reason": reason,
+    }
 
 
 def _tool_answer(model: ScriptedChatModel, call: int) -> Any:
@@ -289,3 +346,167 @@ def test_a_tool_that_does_not_answer_json_is_not_an_error() -> None:
 
     assert state["tool_calls"] == [{"name": "plain_text", "args": {}}]
     assert model.received[1][-1].content == "just text"
+
+
+# --- Waiting for people -------------------------------------------------------
+
+
+def test_pauses_until_people_decide_on_every_order() -> None:
+    run = Run(scripted(calls(_submit(GOOD, ALSO_GOOD))))
+
+    run.start()
+
+    assert run.waiting_for == [101, 102]
+    state = run.decide(_decision(101, GOOD), _decision(102, ALSO_GOOD))
+    assert run.waiting_for is None
+    assert state["stop"] == "decided"
+    assert [d["status"] for d in state["decisions"]] == ["approved", "approved"]
+    assert state["model_calls"] == 1  # approving needs nothing from the model
+
+
+def test_after_a_restart_approvals_need_no_model() -> None:
+    first = Run(scripted(calls(_submit(GOOD))))
+    first.start()
+
+    # Another process: a new graph over the same checkpointer, and no model at all.
+    later = Run(scripted(), checkpointer=first.checkpointer)
+    state = later.decide(_decision(101, GOOD))
+
+    assert state["stop"] == "decided"
+    assert later.model_requests == 0
+
+
+def test_orders_from_the_retry_are_waited_for_too() -> None:
+    run = Run(scripted(calls(_submit(GOOD, INVENTED)), calls(_submit(ALSO_GOOD))))
+
+    run.start()
+
+    assert run.waiting_for == [101, 102]
+
+
+def test_a_run_without_orders_does_not_pause() -> None:
+    run = Run(scripted(says("Nothing to move.")))
+
+    run.start()
+
+    assert run.waiting_for is None
+
+
+def test_a_rejection_lets_the_model_propose_a_replacement() -> None:
+    model = scripted(calls(_submit(GOOD)), calls(_submit(ALSO_GOOD)))
+    run = Run(model, limits=AgentLimits(max_proposals=1, max_model_calls=6))
+    run.start()
+
+    run.decide(_decision(101, GOOD, reason="Promised to a customer"))
+
+    # The model read the note and replaced the order, within the same limit of 1.
+    feedback = model.received[1][-1]
+    assert isinstance(feedback, HumanMessage)
+    assert f"Rejected order 101: {GOOD} to dealer_id 7" in str(feedback.content)
+    assert 'Their note: "Promised to a customer"' in str(feedback.content)
+    assert run.waiting_for == [102]
+    state = run.decide(_decision(102, ALSO_GOOD))
+    assert (state["stop"], state["accepted"], state["declined"]) == ("decided", 2, 1)
+
+
+def test_only_one_round_of_replacements() -> None:
+    assert MAX_REPLACEMENT_ROUNDS == 1
+    model = scripted(calls(_submit(GOOD)), calls(_submit(ALSO_GOOD)), says("never asked"))
+    run = Run(model)
+    run.start()
+    run.decide(_decision(101, GOOD, reason="No"))
+
+    state = run.decide(_decision(102, ALSO_GOOD, reason="No again"))
+
+    assert (state["stop"], state["model_calls"]) == ("decided", 2)
+
+
+def test_the_model_may_find_no_replacement() -> None:
+    run = Run(scripted(calls(_submit(GOOD)), says("No other unit of that trim.")))
+    run.start()
+
+    state = run.decide(_decision(101, GOOD, reason="No"))
+
+    assert state["stop"] == "answered"
+    assert run.waiting_for is None
+
+
+def test_a_replacement_gets_its_own_correction() -> None:
+    model = scripted(
+        calls(_submit(GOOD, INVENTED)),  # one rejected by the validator: the retry is used
+        calls(_submit(ALSO_GOOD)),
+        calls(_submit(INVENTED)),  # replacement, rejected by the validator
+        calls(_submit(GOOD)),  # its correction: GOOD was rejected by people, so free again
+    )
+    validator = FakeValidator()
+    run = Run(model, validator)
+    run.start()
+    validator.orders.remove(TransferProposal.model_validate(_proposal(GOOD)))
+
+    run.decide(_decision(101, GOOD, reason="No"), _decision(102, ALSO_GOOD))
+
+    assert run.waiting_for == [103]
+
+
+def test_the_replacement_round_has_its_own_budget() -> None:
+    # The first proposal used the whole budget of 2 model calls.
+    limits = AgentLimits(max_proposals=5, max_model_calls=2)
+    data: tuple[str, dict[str, Any]] = ("get_dealers_with_shortage", {})
+    model = scripted(calls(data), calls(_submit(GOOD)), calls(data), calls(_submit(ALSO_GOOD)))
+    run = Run(model, limits=limits)
+    run.start()
+
+    state = run.decide(_decision(101, GOOD, reason="No"))
+
+    assert run.waiting_for == [102]
+    assert (state["model_calls"], state["round_calls"]) == (4, 2)
+
+
+def test_the_replacement_round_also_stops_at_the_limit() -> None:
+    limits = AgentLimits(max_proposals=5, max_model_calls=2)
+    data: tuple[str, dict[str, Any]] = ("get_dealers_with_shortage", {})
+    model = scripted(calls(_submit(GOOD)), *(calls(data) for _ in range(5)))
+    run = Run(model, limits=limits)
+    run.start()
+
+    state = run.decide(_decision(101, GOOD, reason="No"))
+
+    assert (state["stop"], state["model_calls"]) == ("step_limit", 3)
+
+
+def test_resuming_before_every_order_is_decided_is_a_bug() -> None:
+    run = Run(scripted(calls(_submit(GOOD, ALSO_GOOD))))
+    run.start()
+
+    with pytest.raises(ValueError, match=r"before every order was decided: \[102\]"):
+        run.decide(_decision(101, GOOD))
+
+
+def test_orders_from_the_first_attempt_are_waited_for_even_if_the_model_gives_up() -> None:
+    # One accepted, one rejected; instead of correcting it, the model answers.
+    run = Run(scripted(calls(_submit(GOOD, INVENTED)), says("I cannot fix that one.")))
+
+    state = run.start()
+
+    assert state["stop"] == "answered"
+    assert run.waiting_for == [101]
+
+
+def test_the_model_is_created_once_per_run() -> None:
+    run = Run(scripted(calls(("get_dealers_with_shortage", {})), calls(_submit(GOOD))))
+
+    run.start()
+
+    assert run.model_requests == 1
+
+
+def test_the_replacement_can_be_corrected_within_its_own_budget() -> None:
+    limits = AgentLimits(max_proposals=5, max_model_calls=2)
+    model = scripted(calls(_submit(GOOD)), calls(_submit(INVENTED)), calls(_submit(ALSO_GOOD)))
+    run = Run(model, limits=limits)
+    run.start()
+
+    # Two calls in the run when the validator rejects the replacement, one in its round.
+    run.decide(_decision(101, GOOD, reason="No"))
+
+    assert run.waiting_for == [102]

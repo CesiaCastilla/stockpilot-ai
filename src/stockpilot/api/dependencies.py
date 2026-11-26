@@ -11,7 +11,7 @@ from stockpilot.agents.llm import build_chat_model
 from stockpilot.core.config import Settings
 from stockpilot.core.database import get_session
 from stockpilot.domain.coverage import CoveragePolicy
-from stockpilot.services.agent_runs import AgentRunService
+from stockpilot.services.agent_runs import AgentRunService, ModelFactory
 from stockpilot.services.catalog import CatalogService
 from stockpilot.services.coverage import CoverageService
 from stockpilot.services.dealers import DealerService
@@ -88,11 +88,21 @@ def get_chat_model(settings: SettingsDep) -> BaseChatModel:
 ChatModelDep = Annotated[BaseChatModel, Depends(get_chat_model)]
 
 
+def get_model_factory(settings: SettingsDep) -> ModelFactory:
+    """For resuming a run: the model is created only if the run needs it, so
+    approving orders never fails because no AI model is configured."""
+    return lambda: build_chat_model(settings)
+
+
+ModelFactoryDep = Annotated[ModelFactory, Depends(get_model_factory)]
+
+
 def get_agent_run_service(request: Request, settings: SettingsDep) -> AgentRunService:
     # The app's session factory, not the request session: a run outlives the request.
     return AgentRunService(
         request.app.state.session_factory,
         request.app.state.agent_tools,
+        checkpointer=request.app.state.checkpoints.saver,
         clock=get_now,
         max_model_calls=settings.agent_max_model_calls,
     )

@@ -16,7 +16,9 @@ class AgentRun(TimestampMixin, Base):
 
     __tablename__ = "agent_runs"
     __table_args__ = (
-        CheckConstraint("(status = 'running') = (finished_at IS NULL)", name="finished_has_date"),
+        CheckConstraint(
+            "(status IN ('running', 'waiting')) = (finished_at IS NULL)", name="finished_has_date"
+        ),
         CheckConstraint("(status = 'failed') = (error IS NOT NULL)", name="failed_has_error"),
         CheckConstraint(
             "(status = 'completed') = (outcome IS NOT NULL)", name="completed_has_outcome"
@@ -40,6 +42,9 @@ class AgentRun(TimestampMixin, Base):
     tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     # Every proposal the model submitted, with the validator's answer.
     submissions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # Why the graph stopped: answered, submitted, retries_exhausted, step_limit or
+    # decided. The outcome says what came of the run; this, how its last round ended.
+    stop_reason: Mapped[str | None] = mapped_column(String(20))
     # The model's last words, when it finished by answering instead of proposing.
     summary: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)

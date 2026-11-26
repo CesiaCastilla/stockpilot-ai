@@ -34,8 +34,11 @@ def start_agent_run(
     model: ChatModelDep,
     settings: SettingsDep,
 ) -> AgentRunRead:
-    """Start a run and answer with it, still running. Follow it with GET /agent/runs/{id};
-    the transfers it proposes appear in /transfer-orders as pending."""
+    """Start a run and answer with it, still running. Follow it with GET /agent/runs/{id}.
+
+    The transfers it proposes appear in /transfer-orders as pending, and the run
+    waits (status "waiting") until every one is approved or rejected. Then it
+    resumes by itself: for rejected ones it may propose a replacement, once."""
     run = service.start(
         payload,
         trigger=AgentRunTrigger.API,
@@ -43,7 +46,7 @@ def start_agent_run(
         model=settings.llm_model,
     )
     # A model call can take many seconds: the response does not wait for it.
-    background.add_task(service.execute, run.id, model)
+    background.add_task(service.execute, run.id, lambda: model)
     return AgentRunRead.model_validate(run)
 
 

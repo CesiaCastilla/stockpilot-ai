@@ -36,6 +36,10 @@ class AgentRunRead(BaseModel):
     submissions: list[dict[str, Any]] = Field(
         description="Every proposal, with the validator's answer and the order it created"
     )
+    stop_reason: str | None = Field(
+        description="How its last round ended: answered, submitted, retries_exhausted, "
+        "step_limit or decided"
+    )
     summary: str | None
     error: str | None
     model_calls: int

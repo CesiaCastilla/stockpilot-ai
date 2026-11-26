@@ -1,7 +1,11 @@
 """What the model is told. Built from typed fields only: no text from a request
-reaches the prompt, so nobody can give the model instructions through the API."""
+reaches the prompt, so nobody can give the model instructions through the API.
+The one exception is the note of a person who rejected an order, which is the
+point of asking them; it is quoted and marked as their note."""
 
+import json
 from datetime import date
+from typing import Any
 
 from stockpilot.schemas.agent_runs import AgentRunRequest
 
@@ -49,3 +53,22 @@ def task(request: AgentRunRequest) -> str:
     if request.trim_id is not None:
         lines.append(f"Only shortages of trim_id {request.trim_id}.")
     return " ".join(lines)
+
+
+def decisions_feedback(decisions: list[dict[str, Any]]) -> str:
+    """What people decided on the run's orders, for the model to propose replacements."""
+    lines = ["People decided on your proposals:"]
+    for d in decisions:
+        transfer = f"order {d['order_id']}: {d['vin']} to dealer_id {d['destination_dealer_id']}"
+        if d["status"] == "approved":
+            lines.append(f"- Approved {transfer}.")
+        else:
+            # Quoted as JSON: the note is data from a person, not part of the instructions.
+            note = json.dumps(d["rejection_reason"], ensure_ascii=False)
+            lines.append(f"- Rejected {transfer}. Their note: {note}")
+    lines.append(
+        "For each rejected transfer, propose a replacement if there is a good one, "
+        "following the same rules and taking their note into account. Do not propose "
+        "the rejected unit again for the same dealer. If there is none, answer why."
+    )
+    return "\n".join(lines)

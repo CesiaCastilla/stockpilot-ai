@@ -8,6 +8,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
@@ -91,8 +92,13 @@ def api_client(
     app = create_app(Settings(database_url=postgres_url))
     app.dependency_overrides[get_session] = lambda: db_session
     app.dependency_overrides[get_chat_model] = lambda: scripted(says("Nothing to move."))
+    checkpointer = InMemorySaver()
     app.dependency_overrides[get_agent_run_service] = lambda: AgentRunService(
-        session_factory, [], clock=lambda: datetime.now(UTC), max_model_calls=10
+        session_factory,
+        [],
+        checkpointer=lambda: checkpointer,
+        clock=lambda: datetime.now(UTC),
+        max_model_calls=10,
     )
     with TestClient(app) as client:
         yield client

@@ -28,7 +28,7 @@ The agent uses Gemini by default. Create a free API key in [Google AI Studio](ht
 uv run python scripts/check_llm.py   # one request: prints the tool the model asked for
 ```
 
-Start a run with `POST /api/v1/agent/runs` and follow it with `GET /api/v1/agent/runs/{id}`. Every transfer the agent proposes goes through the validator and waits in `/api/v1/transfer-orders?status=pending` until a person approves or rejects it.
+Start a run with `POST /api/v1/agent/runs` and follow it with `GET /api/v1/agent/runs/{id}`. Every transfer the agent proposes goes through the validator and waits in `/api/v1/transfer-orders?status=pending` until a person approves or rejects it. Meanwhile the run is `waiting`, saved by LangGraph's PostgreSQL checkpointer, so it survives a restart; when its last order is decided it resumes, and for a rejected one it may propose a replacement, once.
 
 To run without a key, use a local model with [Ollama](https://ollama.com) that supports tool calling: set `LLM_PROVIDER=ollama` and `LLM_MODEL` (for example `qwen3:8b`). Tests never call a real model.
 

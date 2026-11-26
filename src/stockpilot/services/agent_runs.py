@@ -6,14 +6,18 @@ import structlog
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.types import Command
 from sqlalchemy.orm import Session
 
 from stockpilot.agents.graph import AgentLimits, AgentState, build_graph, initial_state
 from stockpilot.agents.prompts import system_prompt, task
 from stockpilot.domain.agent_runs import AgentRunOutcome, AgentRunStatus, AgentRunTrigger
 from stockpilot.domain.errors import NotFoundError
+from stockpilot.domain.transfers import TransferOrderStatus
 from stockpilot.models import AgentRun
 from stockpilot.repositories.agent_runs import AgentRunRepository
+from stockpilot.repositories.transfer_orders import TransferOrderRepository
 from stockpilot.schemas.agent_runs import AgentRunRequest
 from stockpilot.schemas.transfers import TransferProposal
 from stockpilot.services.transfers import TransferService
@@ -24,11 +28,17 @@ logger = structlog.get_logger(__name__)
 MAX_ERROR_LENGTH = 2000
 
 
-class AgentRunService:
-    """Starts agent runs and records what each one did.
+# Called only when the graph needs the model, so a run whose orders were all
+# approved can finish even without an AI model configured.
+ModelFactory = Callable[[], BaseChatModel]
 
-    A run lasts as long as the model takes, so it does not hold one session:
-    each write opens its own, and so does each tool call.
+
+class AgentRunService:
+    """Starts agent runs, resumes them after people decide, and records what each did.
+
+    A run lasts as long as the model takes, and may pause for hours, so it does
+    not hold one session: each write opens its own, and so does each tool call.
+    Its graph state lives in the checkpointer between steps.
     """
 
     def __init__(
@@ -36,11 +46,13 @@ class AgentRunService:
         session_factory: Callable[[], Session],
         tools: Sequence[BaseTool],
         *,
+        checkpointer: Callable[[], BaseCheckpointSaver[str]],
         clock: Callable[[], datetime],
         max_model_calls: int,
     ) -> None:
         self._session_factory = session_factory
         self._tools = tools
+        self._checkpointer = checkpointer
         self._clock = clock
         self._max_model_calls = max_model_calls
 
@@ -62,39 +74,40 @@ class AgentRunService:
             session.commit()
             return run
 
-    def execute(self, run_id: int, model: BaseChatModel) -> AgentRun:
-        """Run the agent to the end and record it. Never raises: a failure is a
-        failed run, so a background task or a job always leaves a record."""
+    def execute(self, run_id: int, model: ModelFactory) -> AgentRun:
+        """Run the agent until it ends or pauses for people to decide. Never raises:
+        a failure is a failed run, so a background task always leaves a record."""
         run = self.get(run_id)
         request = AgentRunRequest.model_validate(run.request)
+        logger.info("agent_run_started", agent_run_id=run_id, request=run.request)
+        return self._advance(run_id, request, model, initial_state(task(request)))
 
-        def propose(proposal: TransferProposal) -> int:
-            with self._session_factory() as session:
-                return TransferService(session).propose(proposal, agent_run_id=run_id).id
-
-        graph = build_graph(
-            model,
-            self._tools,
-            propose,
-            system_prompt=system_prompt(self._clock().date()),
-            limits=AgentLimits(
-                max_proposals=request.max_proposals, max_model_calls=self._max_model_calls
-            ),
-        )
-        state = initial_state(task(request))
-        config: RunnableConfig = {"recursion_limit": 4 * self._max_model_calls}
-        log = logger.bind(agent_run_id=run_id)
-        log.info("agent_run_started", request=run.request)
-        try:
-            # Step by step, so a failure halfway still records what happened before it.
-            for step in graph.stream(initial_state(task(request)), config, stream_mode="values"):
-                # stream_mode="values" yields the whole state after each step.
-                state = cast(AgentState, step)
-        except Exception as error:  # the model, the network, a bug: all end the same way
-            log.exception("agent_run_failed")
-            return self._finish(run_id, state, error=f"{type(error).__name__}: {error}")
-        log.info("agent_run_finished", stop=state["stop"], accepted=state["accepted"])
-        return self._finish(run_id, state)
+    def resume_if_decided(self, run_id: int, model: ModelFactory) -> AgentRun | None:
+        """Resume a waiting run once none of its orders is pending. Called after
+        every decision; only the last one resumes it, and only once."""
+        with self._session_factory() as session:
+            # Locked: two decisions finishing at once cannot both resume the run.
+            run = AgentRunRepository(session).get_for_update(run_id)
+            if run is None or run.status is not AgentRunStatus.WAITING:
+                return None
+            orders = TransferOrderRepository(session).for_run(run_id)
+            if any(o.status is TransferOrderStatus.PENDING for o in orders):
+                return None
+            decisions = [
+                {
+                    "order_id": o.id,
+                    "vin": o.unit.vin,
+                    "destination_dealer_id": o.destination_dealer_id,
+                    "status": o.status.value,
+                    "rejection_reason": o.rejection_reason,
+                }
+                for o in orders
+            ]
+            run.status = AgentRunStatus.RUNNING
+            session.commit()
+            request = AgentRunRequest.model_validate(run.request)
+        logger.info("agent_run_resumed", agent_run_id=run_id)
+        return self._advance(run_id, request, model, Command(resume=decisions))
 
     def get(self, run_id: int) -> AgentRun:
         with self._session_factory() as session:
@@ -108,23 +121,88 @@ class AgentRunService:
             runs = AgentRunRepository(session)
             return runs.search(limit=limit, offset=offset), runs.count()
 
-    def _finish(self, run_id: int, state: AgentState, *, error: str | None = None) -> AgentRun:
+    def _advance(
+        self,
+        run_id: int,
+        request: AgentRunRequest,
+        model: ModelFactory,
+        graph_input: AgentState | Command[Any],
+    ) -> AgentRun:
+        def propose(proposal: TransferProposal) -> int:
+            with self._session_factory() as session:
+                return TransferService(session).propose(proposal, agent_run_id=run_id).id
+
+        log = logger.bind(agent_run_id=run_id)
+        config: RunnableConfig = {
+            # One thread per run: the checkpointer keeps its state under this id.
+            "configurable": {"thread_id": f"agent-run-{run_id}"},
+            "recursion_limit": 4 * self._max_model_calls,
+        }
+        try:
+            graph = build_graph(
+                model,
+                self._tools,
+                propose,
+                system_prompt=system_prompt(self._clock().date()),
+                limits=AgentLimits(
+                    max_proposals=request.max_proposals, max_model_calls=self._max_model_calls
+                ),
+                checkpointer=self._checkpointer(),
+            )
+            # Step by step, so a failure halfway still records what happened before it.
+            for _ in graph.stream(graph_input, config, stream_mode="updates"):
+                pass
+        except Exception as error:  # the model, the network, a bug: all end the same way
+            log.exception("agent_run_failed")
+            return self._record(
+                run_id, self._saved_state(config), error=f"{type(error).__name__}: {error}"
+            )
+        snapshot = graph.get_state(config)
+        state = cast(AgentState, snapshot.values)
+        waiting = bool(snapshot.next)
+        log.info("agent_run_paused" if waiting else "agent_run_finished", stop=state["stop"])
+        return self._record(run_id, state, waiting=waiting)
+
+    def _saved_state(self, config: RunnableConfig) -> AgentState | None:
+        """What the checkpointer kept after the last step that finished, if anything."""
+        try:
+            values = self._checkpointer().get_tuple(config)
+        except Exception:  # the checkpointer itself may be what failed
+            logger.exception("agent_run_state_unavailable")
+            return None
+        if values is None:
+            return None
+        return cast(AgentState, values.checkpoint["channel_values"])
+
+    def _record(
+        self,
+        run_id: int,
+        state: AgentState | None,
+        *,
+        waiting: bool = False,
+        error: str | None = None,
+    ) -> AgentRun:
         with self._session_factory() as session:
             run = AgentRunRepository(session).get(run_id)
             assert run is not None  # it was read when the run began
-            run.tool_calls = state["tool_calls"]
-            run.submissions = state["submissions"]
-            run.model_calls = state["model_calls"]
-            run.input_tokens = state["input_tokens"]
-            run.output_tokens = state["output_tokens"]
-            run.summary = _summary(state)
-            run.finished_at = self._clock()
-            if error is None:
-                run.status = AgentRunStatus.COMPLETED
-                run.outcome = _outcome(state)
-            else:
+            if state is not None:
+                run.tool_calls = state.get("tool_calls", [])
+                run.submissions = state.get("submissions", [])
+                run.model_calls = state.get("model_calls", 0)
+                run.input_tokens = state.get("input_tokens", 0)
+                run.output_tokens = state.get("output_tokens", 0)
+                run.summary = _summary(state)
+                run.stop_reason = state.get("stop")
+            if error is not None:
                 run.status = AgentRunStatus.FAILED
                 run.error = error[:MAX_ERROR_LENGTH]
+                run.finished_at = self._clock()
+            elif waiting:
+                run.status = AgentRunStatus.WAITING
+            else:
+                run.status = AgentRunStatus.COMPLETED
+                run.outcome = _outcome(state) if state is not None else AgentRunOutcome.NO_PROPOSAL
+                run.finished_at = self._clock()
             session.commit()
             return run
 
@@ -140,7 +218,7 @@ def _outcome(state: AgentState) -> AgentRunOutcome:
 
 
 def _summary(state: AgentState) -> str | None:
-    if state["stop"] != "answered":
+    if state.get("stop") != "answered":
         return None
     content: Any = state["messages"][-1].content
     # Some providers answer with a list of content blocks instead of a string.

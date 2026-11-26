@@ -5,6 +5,8 @@ from enum import StrEnum
 
 class AgentRunStatus(StrEnum):
     RUNNING = "running"
+    # Paused until people decide on the orders it proposed. Kept by the checkpointer.
+    WAITING = "waiting"
     COMPLETED = "completed"
     # An error stopped it: the model or a tool failed. Orders created before stay pending.
     FAILED = "failed"

@@ -10,20 +10,33 @@ from datetime import UTC, datetime
 from threading import Barrier
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import Engine, delete, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from stockpilot.domain.agent_runs import AgentRunStatus, AgentRunTrigger
 from stockpilot.domain.errors import ConflictError, DomainError, InvalidStatusTransitionError
 from stockpilot.domain.transfers import InvalidTransferError, TransferOrderStatus, TransferRule
 from stockpilot.domain.unit_status import UnitStatus
-from stockpilot.models import Dealer, Sale, TransferOrder, Trim, Unit, UnitEvent, VehicleModel
+from stockpilot.models import (
+    AgentRun,
+    Dealer,
+    Sale,
+    TransferOrder,
+    Trim,
+    Unit,
+    UnitEvent,
+    VehicleModel,
+)
 from stockpilot.repositories.dealers import DealerRepository
 from stockpilot.repositories.units import UnitRepository
 from stockpilot.schemas.transfers import TransferProposal
 from stockpilot.schemas.units import UnitCreate, UnitUpdate
+from stockpilot.services.agent_runs import AgentRunService
 from stockpilot.services.transfers import TransferService
 from stockpilot.services.units import UnitService
+from tests.fakes import scripted
 
 pytestmark = pytest.mark.integration
 
@@ -55,7 +68,16 @@ def committed(migrated_engine: Engine) -> Iterator[Committed]:
         yield data
     finally:
         with Session(migrated_engine) as session:
-            for table in (TransferOrder, UnitEvent, Sale, Unit, Trim, VehicleModel, Dealer):
+            for table in (
+                TransferOrder,
+                AgentRun,
+                UnitEvent,
+                Sale,
+                Unit,
+                Trim,
+                VehicleModel,
+                Dealer,
+            ):
                 session.execute(delete(table))
             session.commit()
 
@@ -340,3 +362,41 @@ def test_crossed_transfers_do_not_deadlock(migrated_engine: Engine, committed: C
     )
 
     assert results == [None, None]
+
+
+def test_concurrent_decisions_resume_a_run_once(
+    migrated_engine: Engine, committed: Committed
+) -> None:
+    """Two people decide the last two orders at the same moment: both see no
+    pending order left, and both try to resume. The run's row lock lets one."""
+    with Session(migrated_engine) as session:
+        run = AgentRun(
+            status=AgentRunStatus.WAITING,
+            trigger=AgentRunTrigger.API,
+            request={},
+            llm_provider="fake",
+            llm_model="fake",
+            tool_calls=[],
+            submissions=[],
+        )
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    service = AgentRunService(
+        lambda: Session(migrated_engine, expire_on_commit=False),
+        [],
+        checkpointer=InMemorySaver,  # nothing saved: the winner's graph fails, which is fine
+        clock=lambda: datetime.now(UTC),
+        max_model_calls=4,
+    )
+    barrier = Barrier(2)
+
+    def resume() -> object:
+        barrier.wait(timeout=5)
+        return service.resume_if_decided(run_id, lambda: scripted())
+
+    with ThreadPoolExecutor(2) as pool:
+        results = list(pool.map(lambda _: resume(), range(2)))
+
+    assert sum(result is not None for result in results) == 1

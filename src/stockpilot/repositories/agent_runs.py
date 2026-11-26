@@ -13,6 +13,12 @@ class AgentRunRepository:
     def get(self, run_id: int) -> AgentRun | None:
         return self.session.get(AgentRun, run_id)
 
+    def get_for_update(self, run_id: int) -> AgentRun | None:
+        """Get the run and lock its row: only one decision resumes it."""
+        return self.session.get(
+            AgentRun, run_id, with_for_update={"key_share": True}, populate_existing=True
+        )
+
     def add(self, run: AgentRun) -> AgentRun:
         self.session.add(run)
         return run
